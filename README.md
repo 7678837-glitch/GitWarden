@@ -100,4 +100,8 @@ The response includes the application version and the build's Git commit when th
 
 [Release validation](docs/Validation.md)
 
-The repository does not declare a public owner/repository URL or a license in this release material. Add those project-level decisions before publishing links or redistribution terms.
+## License
+
+GitWarden is licensed under the [Apache License 2.0](LICENSE). Third-party dependencies retain their own licenses.
+
+The public owner/repository URL is still to be assigned before publishing repository and image links.

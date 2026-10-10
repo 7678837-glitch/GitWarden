@@ -17,7 +17,7 @@ version-control gitea forgejo python fastapi docker webui
 
 ## Before the first publication
 
-1. Choose the public repository owner/name and a license. A license must be selected by the copyright holder; the project does not assume one.
+1. Choose the public repository owner/name. GitWarden uses [Apache License 2.0](../LICENSE); include the license in source and container distributions, and retain third-party license notices.
 2. Verify the public branch includes only source, tests, example configuration, and public documentation. Review screenshots and commit author/committer metadata as well as file contents.
 3. Run the checks in [Contributing](../CONTRIBUTING.md), then build and smoke-test the container. The workflow's first GitHub-hosted execution still needs to succeed after the repository is created.
 4. Enable GitHub Actions and, if desired, private vulnerability reporting. Set the About description and topics above.

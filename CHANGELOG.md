@@ -4,6 +4,7 @@
 
 First public release candidate.
 
+- Licensed under Apache License 2.0, included in source and container distributions.
 - One-way Git backups over HTTPS, SSH, or local Git paths, with multiple targets per source.
 - Preserve captured history before following force pushes, rewritten tags, and deleted references. Keep preserved objects locally and in a separate target history repository.
 - Require empty target repositories at binding time and verify preserved history before replacing target references.

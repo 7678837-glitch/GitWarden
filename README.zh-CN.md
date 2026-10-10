@@ -100,6 +100,10 @@ curl --fail http://127.0.0.1:8080/health
 - [平台接入](docs/wiki/Platforms.md)
 - [故障排查](docs/wiki/Troubleshooting.md)
 
-本次发布材料没有声明公开 owner/repository 地址或许可证。公开发布链接和再分发条款前，请先补齐这些项目级决策。
+## 许可证
+
+GitWarden 采用 [Apache License 2.0](LICENSE)。第三方依赖保留各自的许可证。
+
+公开 owner/repository 地址仍待确定，发布仓库和镜像链接前需补齐。
 
 [发布验证记录](docs/Validation.md)

@@ -1,4 +1,4 @@
-# The runtime image only needs the application, lockfile and release version.
+# Include only application, build metadata, release version and license files.
 *
 !Dockerfile
 !.dockerignore
@@ -6,6 +6,7 @@
 !uv.lock
 !.python-version
 !VERSION
+!LICENSE
 !gitwarden/
 !gitwarden/**
 

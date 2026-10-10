@@ -3,10 +3,11 @@ FROM python:3.14-slim AS builder
 RUN pip install --no-cache-dir uv==0.12.17
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
 WORKDIR /app
-COPY pyproject.toml uv.lock .python-version ./
+COPY pyproject.toml uv.lock .python-version LICENSE ./
 RUN uv sync --frozen --no-dev
 
 FROM python:3.14-slim AS runtime
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
@@ -19,7 +20,7 @@ RUN groupadd --system --gid 10001 gitwarden \
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY gitwarden/ /app/gitwarden/
-COPY VERSION /app/VERSION
+COPY VERSION LICENSE /app/
 USER 10001
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
