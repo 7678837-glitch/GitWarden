@@ -1,0 +1,15 @@
+# 复制为数据目录下的 config/gitwarden.toml 后按需修改。
+# 优先级：环境变量 > 本文件 > 默认值。管理员密码只能通过 GW_ADMIN_PASSWORD 设置。
+
+[server]
+port = 8080
+
+[scheduler]
+tick_seconds = 30
+workers = 2
+min_sync_minutes = 5
+min_discovery_minutes = 15
+stall_minutes = 10
+
+[logs]
+retention_days = 90

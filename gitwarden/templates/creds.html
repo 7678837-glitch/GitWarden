@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ t('creds.title') }}{% endblock %}
+{% block content %}
+<style>
+.cred-table{overflow:hidden}.cred-secret{color:var(--muted)}.cred-form{max-width:860px}.kind-switch{display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:#EEF1EE;border-radius:10px;align-self:flex-start}.kind-switch button{min-height:40px;padding:0 16px;border:0;background:transparent;color:var(--muted);font-size:14px}.kind-switch button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(23,32,28,.12)}.ref-list{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--muted);font-size:13px}.ref-list span{white-space:nowrap}.cred-delete{min-height:36px}.cred-delete[disabled]{cursor:not-allowed}.cred-add{display:flex;flex-direction:column;gap:18px}
+</style>
+
+<header>
+  <div><h1>{{ t('creds.title') }}</h1>
+  <p>{{ t('creds.intro') }}</p></div>
+</header>
+
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+
+<section aria-labelledby="saved-heading" class="card cred-table">
+  <div class="card-header"><h2 id="saved-heading">{{ t('creds.saved') }}</h2></div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th scope="col">{{ t('creds.name') }}</th><th scope="col">{{ t('creds.type') }}</th><th scope="col">{{ t('creds.account') }}</th><th scope="col">{{ t('creds.secret') }}</th><th scope="col">{{ t('creds.used_by') }}</th><th scope="col"><span class="sr-only">{{ t('creds.actions') }}</span></th></tr></thead>
+      <tbody>
+      {% for credential in credentials %}
+      {% set references = credential.task_count + credential.target_count + credential.access_count %}
+      <tr>
+        <td style="font-weight:600">{{ credential.name }}</td>
+        <td><span class="pill{% if credential.kind == 'https' %} info{% endif %}">{{ t('creds.kind.' ~ credential.kind) }}</span></td>
+        <td class="mono">{{ credential.username or t('creds.no_account') }}</td>
+        <td class="cred-secret">{% if credential.kind == 'ssh' %}{{ t('creds.saved_key') }}{% else %}{{ t('creds.saved_hidden') }}{% endif %}</td>
+        <td>
+          {% if references %}
+          <div class="ref-list">
+            {% if credential.task_count %}<span>{{ credential.task_count }} {{ t('creds.task' if credential.task_count == 1 else 'creds.tasks') }}</span>{% endif %}
+            {% if credential.target_count %}<span>{{ credential.target_count }} {{ t('creds.target' if credential.target_count == 1 else 'creds.targets') }}</span>{% endif %}
+            {% if credential.access_count %}<span>{{ credential.access_count }} {{ t('creds.platform' if credential.access_count == 1 else 'creds.platforms') }}</span>{% endif %}
+          </div>
+          {% else %}<span class="muted">{{ t('creds.unused') }}</span>{% endif %}
+        </td>
+        <td>
+          {% if references %}<button type="button" class="secondary cred-delete" disabled title="{{ t('creds.delete_in_use_title') }}">{{ t('creds.delete') }}</button>
+          {% else %}<form method="post" action="/creds/{{ credential.id }}/delete" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger cred-delete">{{ t('creds.delete') }}</button></form>{% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="6" class="empty">{{ t('creds.empty') }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="add-heading" class="card padded cred-form">
+  <div class="cred-add">
+    <h2 id="add-heading" style="margin:0">{{ t('creds.new_credential') }}</h2>
+    <form method="get" action="/creds" class="kind-switch" aria-label="{{ t('creds.kind_switch') }}">
+      <input type="hidden" name="name" value="{{ values.name }}">
+      <input type="hidden" name="username" value="{{ values.username }}">
+      <button type="submit" name="kind" value="https" class="{% if values.kind == 'https' %}active{% endif %}" aria-pressed="{{ 'true' if values.kind == 'https' else 'false' }}">{{ t('creds.kind.https_form') }}</button>
+      <button type="submit" name="kind" value="ssh" class="{% if values.kind == 'ssh' %}active{% endif %}" aria-pressed="{{ 'true' if values.kind == 'ssh' else 'false' }}">{{ t('creds.kind.ssh_form') }}</button>
+    </form>
+    <form method="post" action="/creds" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="kind" value="{{ values.kind }}">
+      <label class="field">{{ t('creds.name') }}<input name="name" required value="{{ values.name }}" placeholder="{{ t('creds.name_placeholder') }}"></label>
+      {% if values.kind == 'ssh' %}
+      <label class="field">{{ t('creds.private_key') }}<textarea name="private_key" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea><span class="hint">{{ t('creds.private_key_hint') }}</span></label>
+      <label class="field">{{ t('creds.known_hosts') }}<textarea name="known_hosts" spellcheck="false" placeholder="git.example.lan ssh-ed25519 AAAA…"></textarea><span class="hint">{{ t('creds.known_hosts_hint') }}</span></label>
+      {% else %}
+      <label class="field">{{ t('creds.username') }}<input name="username" value="{{ values.username }}" autocomplete="off"><span class="hint">{{ t('creds.username_hint') }}</span></label>
+      <label class="field">{{ t('creds.secret_input') }}<input name="secret" type="password" autocomplete="new-password"><span class="hint">{{ t('creds.secret_hint') }}</span></label>
+      {% endif %}
+      <div><button type="submit">{{ t('creds.save') }}</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

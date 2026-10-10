@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}{{ task['name'] }}{% endblock %}
+{% block content %}
+<div class="stack">
+  <a href="/">← {{ t('task.back_overview') }}</a>
+  {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+
+  <header class="page-header">
+    <div>
+      <div class="row">
+        <h1>{{ task['name'] }}</h1>
+        <span class="pill {% if task['enabled'] %}ok{% else %}warn{% endif %}">
+          {{ t('task.enabled') if task['enabled'] else t('task.disabled') }} · {{ t('task.every_minutes', minutes=task['effective_interval']) }}
+        </span>
+      </div>
+      <div class="mono muted">{{ t('task.source') }} {{ task['source_url'] }}{% if task['source_credential'] %} · {{ t('task.credential') }} {{ task['source_credential']['name'] }} ({{ task['source_credential']['kind']|cred_kind }}){% endif %}</div>
+      <div class="muted">
+        {{ t('task.managed_by') }}
+        {% if task['managed']['manual'] %}
+          {{ t('task.managed_manual') }}
+        {% elif task['managed']['instance'] and task['managed']['access'] %}
+          <a href="/platforms">{{ task['managed']['instance']['name'] }} · {{ task['managed']['access']['name'] }}</a>
+        {% else %}
+          {{ t('task.managed_unknown') }}
+        {% endif %}
+        · {{ t('task.detailed_logging') }} <strong>{{ t('task.on') if task['detailed_logging'] else t('task.off') }}</strong>
+      </div>
+      {% if task['last_run_at'] %}<div class="muted">{{ t('task.last_run') }} {{ task['last_run_at']|ago }}{% if task['last_status'] %} · {{ task['last_status']|status }}{% endif %}{% if task['last_success_at'] %} · {{ t('task.last_success') }} {{ task['last_success_at']|ago }}{% endif %}</div>{% endif %}
+      {% if task['next_run_at'] %}<div class="muted">{{ t('task.next_run') }} {{ task['next_run_at']|ts }}</div>{% endif %}
+      {% if task['interval_reason'] %}<div class="hint">{{ t(task['interval_reason'], minutes=task['effective_interval']) }}</div>{% endif %}
+      {% if task['external_note'] %}<div class="notice warn"><strong>{{ t('task.incomplete_backup') }}</strong> {{ task['external_note']|msg }}. {{ t('task.incomplete_backup_hint') }}</div>{% endif %}
+    </div>
+    <div class="actions">
+      <form method="post" action="/tasks/{{ task['id'] }}/run" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">{{ t('common.action.run_now') }}</button></form>
+      <a class="btn secondary" href="#edit" onclick="document.getElementById('edit').querySelector('details').open=true">{{ t('task.edit') }}</a>
+      <form method="post" action="/tasks/{{ task['id'] }}/detailed" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="enabled" value="{{ 0 if task['detailed_logging'] else 1 }}"><button type="submit" class="secondary">{{ t('task.detailed_on') if not task['detailed_logging'] else t('task.detailed_off') }}</button></form>
+      <form method="post" action="/tasks/{{ task['id'] }}/toggle" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="enabled" value="{{ 0 if task['enabled'] else 1 }}"><button type="submit" class="secondary">{{ t('task.disable') if task['enabled'] else t('task.enable') }}</button></form>
+    </div>
+  </header>
+
+  <section class="stack" aria-labelledby="targets">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="targets">{{ t('task.targets') }}</h2>
+      <a class="btn secondary small" href="#add-target" onclick="document.getElementById('add-target').querySelector('details').open=true">{{ t('task.add_target') }}</a>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
+      {% for target in targets %}
+      <article class="card padded stack{% if target['attention'] %} target-attention{% endif %}">
+        <div class="row" style="justify-content:space-between">
+          <h3>{{ target['name'] }}</h3>
+          <span class="pill {{ target['status_class'] }}">{{ t(target['status_key']) }}</span>
+        </div>
+        <div class="triple">
+          <div class="metric{% if target['attention'] %} error{% endif %}"><small>{{ t('task.mirror') }}</small><strong>{{ t('task.mirror_out_of_sync') if target['attention'] else t('task.mirror_in_sync') }}</strong></div>
+          <div class="metric{% if target['attention'] %} error{% endif %}"><small>{{ t('task.history') }}</small><strong>{{ target['history_count'] }}{% if target['history_total'] is not none %} {{ t('task.preserved') }}{% endif %}</strong></div>
+          <div class="metric"><small>{{ t('task.last_audit') }}</small><strong>{{ target['last_audit_at']|ago }}</strong></div>
+        </div>
+        {% if target['attention'] %}<div class="notice error"><strong>{{ t('task.why_paused') }}</strong> {{ t('task.target.unbound') if not target['bound'] else ((target['last_detail']|msg) or t('task.target_attention')) }}<br><strong>{{ t('task.what_to_do') }}</strong> {{ t('task.bind_target') if not target['bound'] else t('task.retry_hint') }}</div>{% elif target['last_detail'] %}<div class="hint">{{ target['last_detail']|msg }}</div>{% endif %}
+        <div class="mono muted">{{ t('task.mirror_url') }} {{ target['main_url'] }}<br>{{ t('task.history_url') }} {{ target['history_url'] }}</div>
+        <div class="actions">
+          {% if not target['bound'] %}<form method="post" action="/targets/{{ target['id'] }}/bind" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="small">{{ t('task.bind_target') }}</button></form>{% endif %}
+          <form method="post" action="/targets/{{ target['id'] }}/retry" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="small">{{ t('common.action.retry') }}</button></form>
+          <form method="post" action="/targets/{{ target['id'] }}/audit" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary small">{{ t('common.action.audit') }}</button></form>
+          <a class="btn secondary small" href="/logs?task_id={{ task['id'] }}">{{ t('task.view_log') }}</a>
+        </div>
+        <details>
+          <summary>{{ t('task.edit_target') }}</summary>
+          <form method="post" action="/targets/{{ target['id'] }}/edit" class="form">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <label class="field">{{ t('wizard.target_name') }}<input name="name" required value="{{ target['name'] }}"></label>
+            <label class="field">{{ t('wizard.mirror_url') }}<input name="main_url" required value="{{ target['main_url'] }}" class="mono"></label>
+            <label class="field">{{ t('wizard.history_url') }}<input name="history_url" required value="{{ target['history_url'] }}" class="mono"></label>
+            <label class="field">{{ t('wizard.target_credential') }}<select name="cred_id"><option value="">{{ t('wizard.credential_none') }}</option>{% for c in creds %}<option value="{{ c['id'] }}"{% if target['cred_id']|string == c['id']|string %} selected{% endif %}>{{ c['name'] }} · {{ c['kind']|cred_kind }}</option>{% endfor %}</select></label>
+            <p class="hint">{{ t('task.edit_target_hint') }}</p>
+            <div class="actions"><button type="submit" class="small">{{ t('common.action.save') }}</button></div>
+          </form>
+        </details>
+        <details>
+          <summary>{{ t('common.action.delete') }}</summary>
+          <form method="post" action="/targets/{{ target['id'] }}/delete" class="form">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <p class="hint">{{ t('task.delete_target_hint') }}</p>
+            <div class="actions"><button type="submit" class="danger small">{{ t('task.delete_target_confirm') }}</button></div>
+          </form>
+        </details>
+      </article>
+      {% else %}
+      <div class="card empty">{{ t('task.no_targets') }}</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card stack" aria-labelledby="timeline">
+    <div class="card-header"><div><h2 id="timeline">{{ t('task.events') }}</h2><p class="muted">{{ t('task.events_hint') }}</p></div></div>
+    {% for event in events %}
+    <details{% if loop.first %} open{% endif %}>
+      <summary><span class="pill">{{ event['kind']|kind }}</span> <span class="mono">{{ event['ref'] }}</span> <span class="muted">· {{ event['at']|ago }}</span></summary>
+      <div class="detail-body stack">
+        <div class="mono muted">{{ event['old']|short }} → {{ event['new']|short }}</div>
+        {% if event['preserved_ref'] %}
+        <div class="actions"><a class="btn small" href="/tasks/{{ task['id'] }}/events/{{ event['id'] }}/bundle">{{ t('task.download_bundle') }}</a><span class="hint">{{ t('task.bundle_hint') }}</span></div>
+        <strong>{{ t('task.restore_from_history') }}</strong>
+        {% for command in event['commands'] %}
+        <code class="code">git clone {{ command['history_arg'] }}
+cd {{ command['clone_dir'] }}
+git show {{ command['tag'] }}
+git checkout -b restore {{ command['tag'] }}^{}
+        </code>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </details>
+    {% else %}<div class="empty">{{ t('task.no_events') }}</div>{% endfor %}
+  </section>
+
+  <section class="card padded stack" aria-labelledby="runs">
+    <div class="row" style="justify-content:space-between"><h2 id="runs">{{ t('task.runs') }}</h2><a href="/logs?task_id={{ task['id'] }}">{{ t('task.full_log') }}</a></div>
+    <div class="stack">
+      {% for run in runs %}
+      {% set run_status = run['status'] or 'running' %}
+      <div class="row" style="align-items:flex-start">
+        <span class="muted" style="min-width:150px">{{ run['started_at']|ago }}</span>
+        <span class="pill {{ run_status }}">{% if run['status'] %}{{ run_status|status }}{% else %}{{ t('logs.status.running') }}{% endif %}</span>
+        <span>{{ (run['message']|msg) or ((t('task.initial_backup_progress', progress=run['progress']|progress_summary) if run_status == 'running' and run['progress'] else t('tasks.run.initial_backup')) if run['initial_backup'] else '') }}</span>
+      </div>
+      {% else %}<div class="empty">{{ t('task.no_runs') }}</div>{% endfor %}
+    </div>
+  </section>
+
+  <section id="edit" class="card padded">
+    <details{% if edit_open %} open{% endif %}>
+      <summary>{{ t('task.edit') }}</summary>
+      <form method="post" action="/tasks/{{ task['id'] }}/edit" class="form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        {% set values = task_values %}{% include "_task_fields.html" %}
+        <div class="actions"><button type="submit">{{ t('common.action.save') }}</button></div>
+      </form>
+    </details>
+  </section>
+
+  <section id="add-target" class="card padded">
+    <details>
+      <summary>{{ t('task.add_target') }}</summary>
+      <form method="post" action="/tasks/{{ task['id'] }}/targets" class="form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="field">{{ t('wizard.target_name') }}<input name="name" required value="{{ target_values['name'] }}"></label>
+        <label class="field">{{ t('wizard.mirror_url') }}<input name="main_url" required value="{{ target_values['main_url'] }}" class="mono"></label>
+        <label class="field">{{ t('wizard.history_url') }}<input name="history_url" required value="{{ target_values['history_url'] }}" class="mono"></label>
+        <label class="field">{{ t('wizard.target_credential') }}<select name="cred_id"><option value="">{{ t('wizard.credential_none') }}</option>{% for c in creds %}<option value="{{ c['id'] }}"{% if target_values['cred_id']|string == c['id']|string %} selected{% endif %}>{{ c['name'] }} · {{ c['kind']|cred_kind }}</option>{% endfor %}</select></label>
+        <div class="actions"><button type="submit">{{ t('task.add_target') }}</button></div>
+      </form>
+      {% if platforms %}
+      <h3>{{ t('wizard.mode_platform') }}</h3>
+      <form method="post" action="/tasks/{{ task['id'] }}/targets/provision" class="form" style="margin-top:20px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="field">{{ t('field.access') }}<select name="access_id" required><option value="">{{ t('wizard.select_platform') }}</option>{% for p in platforms %}<option value="{{ p['id'] }}"{% if provision_values['access_id']|string == p['id']|string %} selected{% endif %}>{{ p['name'] }} · {{ p['kind'] }}</option>{% endfor %}</select></label>
+        <label class="field">{{ t('field.owner') }}<input name="owner" required value="{{ provision_values['owner'] }}"></label>
+        <label class="field">{{ t('field.target') }}<input name="name" required value="{{ provision_values['name'] }}"></label>
+        <div class="actions"><button type="submit">{{ t('task.provision_bind') }}</button></div>
+      </form>
+      {% endif %}
+    </details>
+  </section>
+</div>
+{% endblock %}

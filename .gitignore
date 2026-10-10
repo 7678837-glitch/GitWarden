@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+data/*
+!data/config/
+data/config/*
+!data/config/*.example
+.local-backups/
+__pycache__/
+.venv/
+.AIINFO/
+.pytest_cache/
+.ruff_cache/
+dist/
+*.bundle
+*.db
+*.db-wal
+*.db-shm
+*.tgz
+# Local planning and research material is not part of the public project.
+docs/background/
+docs/tasks/
+docs/design/
+docs/design.md
+docs/handoff.md
+docs/platform-extension.md

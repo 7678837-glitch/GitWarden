@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ t('tasks.title') }}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{{ t('tasks.title') }}</h1>
+    <p>{{ t('tasks.subtitle') }}</p>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/platforms">{{ t('tasks.action.connect_platform') }}</a>
+    <a class="btn" href="/tasks/new">{{ t('tasks.action.backup_repository') }}</a>
+  </div>
+</header>
+
+<form method="get" action="/tasks" class="filters" aria-label="{{ t('tasks.filters.label') }}">
+  <label class="search">{{ t('tasks.filters.search') }}
+    <input type="search" name="search" value="{{ search }}" placeholder="{{ t('tasks.filters.search_placeholder') }}">
+  </label>
+  <label>{{ t('tasks.filters.status') }}
+    <select name="status">
+      <option value="">{{ t('tasks.filters.any') }}</option>
+      <option value="healthy"{% if selected_status == 'healthy' %} selected{% endif %}>{{ t('tasks.status.healthy') }}</option>
+      <option value="needs_attention"{% if selected_status in ('needs_attention', 'attention') %} selected{% endif %}>{{ t('tasks.status.needs_attention') }}</option>
+      <option value="failing"{% if selected_status == 'failing' %} selected{% endif %}>{{ t('tasks.status.failing') }}</option>
+      <option value="not_visible"{% if selected_status == 'not_visible' %} selected{% endif %}>{{ t('tasks.status.not_visible') }}</option>
+      <option value="source_gone"{% if selected_status == 'source_gone' %} selected{% endif %}>{{ t('tasks.status.source_gone') }}</option>
+      <option value="excluded"{% if selected_status == 'excluded' %} selected{% endif %}>{{ t('tasks.status.excluded') }}</option>
+      <option value="disabled"{% if selected_status == 'disabled' %} selected{% endif %}>{{ t('tasks.status.disabled') }}</option>
+    </select>
+  </label>
+  <label>{{ t('tasks.filters.managed') }}
+    <select name="managed">
+      <option value="">{{ t('tasks.filters.all') }}</option>
+      {% for option in managed_options %}
+      <option value="{{ option.value }}"{% if managed == option.value %} selected{% endif %}>
+        {% if option.label_key %}{{ t(option.label_key) }}{% else %}{{ option.label }}{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>{{ t('tasks.filters.backup') }}
+    <select name="backup">
+      <option value="">{{ t('tasks.filters.any') }}</option>
+      <option value="complete"{% if backup == 'complete' %} selected{% endif %}>{{ t('tasks.backup.complete') }}</option>
+      <option value="incomplete"{% if backup == 'incomplete' %} selected{% endif %}>{{ t('tasks.backup.incomplete') }}</option>
+    </select>
+  </label>
+  <button type="submit" class="small">{{ t('tasks.filters.apply') }}</button>
+  {% if search or selected_status or managed or backup %}<a class="btn secondary small" href="/tasks">{{ t('tasks.filters.clear') }}</a>{% endif %}
+</form>
+
+<form method="post" action="/tasks/bulk">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <section aria-label="{{ t('tasks.table.label') }}" class="card table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col" style="width:40px"><span class="sr-only">{{ t('tasks.bulk.select') }}</span></th>
+          <th scope="col">{{ t('tasks.table.task') }}</th>
+          <th scope="col">{{ t('tasks.table.managed') }}</th>
+          <th scope="col">{{ t('tasks.table.status') }}</th>
+          <th scope="col">{{ t('tasks.table.targets') }}</th>
+          <th scope="col">{{ t('tasks.table.last_success') }}</th>
+          <th scope="col">{{ t('tasks.table.interval') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><input type="checkbox" name="task_ids" value="{{ row.id }}" aria-label="{{ t('tasks.bulk.select_task', name=row.name) }}"></td>
+          <td>
+            <a href="/tasks/{{ row.id }}" style="font-weight:600">{{ row.name }}</a>
+            <div class="mono url muted">{{ row.source_url }}</div>
+          </td>
+          <td>
+            {% if row.managed.label_key %}
+              {{ t(row.managed.label_key) }}
+            {% else %}
+              {{ row.managed.instance_name }} · {{ row.managed.access_name }}
+            {% endif %}
+          </td>
+          <td><span class="pill {{ row.status_class }}">{{ t(row.status_label_key) }}</span></td>
+          <td>
+            {% for target in row.targets %}
+              <span class="pill {{ target.status_class }}">{{ target.name }} · {{ t(target.status_key) }}</span>
+            {% else %}
+              <span class="pill">{{ t('tasks.target.none') }}</span>
+            {% endfor %}
+          </td>
+          <td style="white-space:nowrap">
+            {% if row.run_running %}
+              <span class="info">{{ t('tasks.run.running') }}</span>
+              {% if row.initial_backup %}
+                <div class="hint">{{ t('tasks.run.initial_backup') }}{% if row.run_progress %} · {{ row.run_progress|progress_summary }}{% endif %}</div>
+              {% endif %}
+            {% else %}
+              {{ row.last_success_at|ago }}
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;color:var(--muted)">
+            {% if row.interval_extended and row.interval_extension_kind == 'duration' %}
+              {{ t('tasks.interval.duration', configured=row.interval_minutes, effective=row.effective_interval_minutes, duration=row.duration_minutes or row.effective_interval_minutes) }}
+            {% elif row.interval_extended and row.interval_extension_kind == 'backoff' %}
+              {{ t('tasks.interval.backoff', configured=row.interval_minutes, effective=row.effective_interval_minutes, failures=row.failure_count) }}
+            {% else %}
+              {{ t('tasks.interval.minutes', value=row.interval_minutes) }}
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty">{{ t('tasks.empty') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span>{{ t('tasks.pagination.summary', start=page_start, end=page_end, total=total) }}</span>
+      <div class="actions">
+        {% if previous_url %}<a class="btn secondary small" href="{{ previous_url }}">{{ t('tasks.pagination.previous') }}</a>{% else %}<span class="btn secondary small" aria-disabled="true">{{ t('tasks.pagination.previous') }}</span>{% endif %}
+        {% if next_url %}<a class="btn secondary small" href="{{ next_url }}">{{ t('tasks.pagination.next') }}</a>{% else %}<span class="btn secondary small" aria-disabled="true">{{ t('tasks.pagination.next') }}</span>{% endif %}
+      </div>
+    </div>
+  </section>
+
+  <div class="actions" style="margin-top:12px">
+    <span class="muted">{{ t('tasks.bulk.hint') }}</span>
+    <button type="submit" name="action" value="run" class="small">{{ t('common.action.run_now') }}</button>
+    <button type="submit" name="action" value="enable" class="secondary small">{{ t('common.action.enable') }}</button>
+    <button type="submit" name="action" value="disable" class="secondary small">{{ t('common.action.disable') }}</button>
+    <button type="submit" name="action" value="detailed_on" class="secondary small">{{ t('tasks.bulk.detailed_on') }}</button>
+    <button type="submit" name="action" value="detailed_off" class="secondary small">{{ t('tasks.bulk.detailed_off') }}</button>
+  </div>
+</form>
+{% endblock %}

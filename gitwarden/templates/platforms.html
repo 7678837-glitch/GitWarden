@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ t('platforms.title') }}{% endblock %}
+{% block content %}
+<style>
+.platform-layout{align-items:flex-start}.platform-aside{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:16px}.platform-wide{flex:999 1 560px;min-width:0}.instance-card{display:flex;flex-direction:column;gap:10px}.access-list{display:flex;flex-direction:column;gap:6px}.access-pick{display:flex;flex-direction:column;gap:2px;text-align:left;padding:10px 12px;border-radius:8px;background:var(--bg);border:2px solid transparent;color:var(--ink);text-decoration:none;min-height:44px}.access-pick:hover{background:#EEF1EE;color:var(--ink)}.access-pick.selected{background:#E3F1EC;border-color:var(--green)}.access-pick .access-meta{color:var(--muted);font-size:13px}.platform-wide>.padded{padding:22px 24px}.platform-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}.platform-header h2{margin:0;font-size:20px}.platform-header .subline{color:var(--muted);font-size:14px;margin-top:4px}.platform-fieldset{display:flex;flex-direction:column;gap:14px}.segmented{display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:#EEF1EE;border-radius:10px;align-self:flex-start}.segmented label{display:flex;align-items:center;min-height:40px;padding:0 14px;border-radius:8px;color:var(--muted);font-size:14px;cursor:pointer}.segmented label:has(input:checked){background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(23,32,28,.12)}.segmented input{position:absolute;opacity:0;pointer-events:none}.preview-table{border:1px solid #EEF1EE;border-radius:10px;overflow:hidden}.preview-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid #EEF1EE;font-size:14px}.preview-row:last-child{border-bottom:0}.preview-name{flex:1 1 220px;min-width:0}.preview-reason{color:var(--muted);font-size:13px}.preview-add{background:#E3F1EC;color:var(--green)}.preview-keep,.preview-skip{background:#EEF1EE;color:#3F4A44}.preview-disable{background:#FDF0E1;color:#9A4A00}.preview-other_access{background:#E8EEF9;color:#1F4E9A}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.summary-grid .metric strong{display:block;font-size:22px}.summary-add{background:#E3F1EC}.summary-disable{background:#FDF0E1}.summary-other_access{background:#E8EEF9}.instance-add{margin-top:0}.instance-add summary{padding:12px 14px}.instance-add .detail-body{padding:0 14px 14px}.access-add summary{padding:10px 12px}.access-add .detail-body{padding:0 12px 12px}
+.platform-fieldset:has(input[name=rule_mode][value=include]:checked) .exclude-patterns,.platform-fieldset:has(input[name=rule_mode][value=exclude]:checked) .include-patterns{display:none}
+</style>
+
+<header class="page-header">
+  <div>
+    <h1>{{ t('platforms.title') }}</h1>
+    <p>{{ t('platforms.intro') }}</p>
+  </div>
+  <details class="card instance-add">
+    <summary class="btn secondary small">{{ t('platforms.add_instance') }}</summary>
+    <div class="detail-body">
+      <form method="post" action="/instances" class="form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="field">{{ t('platforms.instance_name') }}<input name="name" required value="{{ instance_values.name }}"></label>
+        <label class="field">{{ t('platforms.instance_kind') }}<select name="kind">
+          <option value="gitea"{% if instance_values.kind == 'gitea' %} selected{% endif %}>{{ t('platforms.kind.gitea') }}</option>
+          <option value="forgejo"{% if instance_values.kind == 'forgejo' %} selected{% endif %}>{{ t('platforms.kind.forgejo') }}</option>
+        </select></label>
+        <label class="field">{{ t('platforms.base_url') }}<input name="base_url" required value="{{ instance_values.base_url }}" placeholder="https://git.example.lan"></label>
+        <button type="submit" class="small">{{ t('platforms.save_instance') }}</button>
+      </form>
+    </div>
+  </details>
+</header>
+
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+
+<div class="split platform-layout">
+  <section class="platform-aside" aria-labelledby="instances-heading">
+    <h2 id="instances-heading">{{ t('platforms.instances') }}</h2>
+    {% for instance in instances %}
+    <article class="card padded instance-card">
+      <div class="row" style="justify-content:space-between">
+        <h3 style="margin:0">{{ instance.name }}</h3>
+        <span class="pill">{{ t('platforms.kind.' ~ instance.kind) }}</span>
+      </div>
+      <div class="mono muted">{{ instance.base_url }}</div>
+      <div class="access-list">
+        {% for access in instance.accesses %}
+        <a class="access-pick{% if selected_access and access.id == selected_access.id %} selected{% endif %}" href="/platforms?instance_id={{ instance.id }}&amp;access_id={{ access.id }}"{% if selected_access and access.id == selected_access.id %} aria-current="page"{% endif %}>
+          <span class="row" style="justify-content:space-between"><span style="font-weight:600">{{ access.name }}</span><span class="muted">{{ access.task_count }} {{ t('platforms.tasks') }}</span></span>
+          <span class="access-meta">{% if access.scope_mode == 'owners' %}{{ t('platforms.scope_owners_short', owners=access.owners_text) }}{% else %}{{ t('platforms.scope_all_short') }}{% endif %}</span>
+        </a>
+        {% else %}<p class="empty">{{ t('platforms.no_accesses') }}</p>{% endfor %}
+      </div>
+      <details class="access-add">
+        <summary class="btn secondary small">{{ t('platforms.add_access') }}</summary>
+        <div class="detail-body">
+          <form method="post" action="/accesses" class="form">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="instance_id" value="{{ instance.id }}">
+            <label class="field">{{ t('platforms.access_name') }}<input name="name" required></label>
+            <label class="field">{{ t('platforms.credential') }}<select name="cred_id" required>{% for credential in credentials %}<option value="{{ credential.id }}">{{ credential.name }}{% if credential.username %} · {{ credential.username }}{% endif %}</option>{% else %}<option value="">{{ t('platforms.no_credentials') }}</option>{% endfor %}</select></label>
+            <input type="hidden" name="include_forks" value="0"><label class="chk"><input type="checkbox" name="include_forks" value="1">{{ t('platforms.include_forks') }}</label>
+            <input type="hidden" name="include_archived" value="0"><label class="chk"><input type="checkbox" name="include_archived" value="1" checked>{{ t('platforms.include_archived') }}</label>
+            <input type="hidden" name="include_public" value="0"><label class="chk"><input type="checkbox" name="include_public" value="1" checked>{{ t('platforms.include_public') }}</label>
+            <input type="hidden" name="include_private" value="0"><label class="chk"><input type="checkbox" name="include_private" value="1" checked>{{ t('platforms.include_private') }}</label>
+            <input type="hidden" name="auto_enable" value="0"><label class="chk"><input type="checkbox" name="auto_enable" value="1" checked>{{ t('platforms.auto_enable') }}</label>
+            <button type="submit" class="small">{{ t('platforms.save_access') }}</button>
+          </form>
+        </div>
+      </details>
+    </article>
+    {% else %}<div class="card empty">{{ t('platforms.no_instances') }}</div>{% endfor %}
+  </section>
+
+  <section class="platform-wide card padded" aria-labelledby="access-heading">
+    {% if selected_access and selected_instance %}
+    <div class="platform-header">
+      <div>
+        <h2 id="access-heading">{{ selected_instance.name }} · {{ access_values.name }}</h2>
+        <div class="subline">{{ t('platforms.credential_detail', credential=selected_access.cred_name or t('platforms.no_credential'), username=selected_access.cred_username or t('platforms.no_username')) }} · {{ t('platforms.last_discovery') }}: {% if selected_access.last_discovery_at %}{{ selected_access.last_discovery_at|ago }}{% else %}{{ t('platforms.never_discovered') }}{% endif %}{% if selected_access.consecutive_failures %} · <span class="pill error">{{ t('platforms.discovery_failing', count=selected_access.consecutive_failures) }}</span>{% endif %}</div>
+      </div>
+      <div class="actions">
+        <form method="post" action="/accesses/{{ selected_access.id }}/discover" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="small">{{ t('platforms.discover') }}</button></form>
+        <form method="post" action="/accesses/{{ selected_access.id }}/delete" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary small">{{ t('platforms.remove_access') }}</button></form>
+      </div>
+    </div>
+
+    <form method="post" action="/accesses/{{ selected_access.id }}/preview" class="stack" id="access-editor" data-preview-access-id="{{ preview_access_id or '' }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="preview_access_id" value="{{ preview_access_id or selected_access.id }}">
+      <fieldset class="platform-fieldset">
+        <legend>{{ t('platforms.access_settings') }}</legend>
+        <label class="field">{{ t('platforms.access_name') }}<input name="name" value="{{ access_values.name }}" required></label>
+        <label class="field">{{ t('platforms.credential') }}<select name="cred_id" required>{% for credential in credentials %}<option value="{{ credential.id }}"{% if access_values.cred_id|int == credential.id %} selected{% endif %}>{{ credential.name }}{% if credential.username %} · {{ credential.username }}{% endif %}</option>{% else %}<option value="">{{ t('platforms.no_credentials') }}</option>{% endfor %}</select></label>
+      </fieldset>
+
+      <fieldset class="platform-fieldset">
+        <legend>{{ t('platforms.scope') }}</legend>
+        <div class="segmented" role="radiogroup" aria-label="{{ t('platforms.scope') }}">
+          <label><input type="radio" name="scope_mode" value="all"{% if access_values.scope_mode == 'all' %} checked{% endif %}>{{ t('platforms.scope_all') }}</label>
+          <label><input type="radio" name="scope_mode" value="owners"{% if access_values.scope_mode == 'owners' %} checked{% endif %}>{{ t('platforms.scope_owners') }}</label>
+        </div>
+        <label class="field">{{ t('platforms.owners') }}<textarea name="owners" class="mono">{{ access_values.owners_text }}</textarea><span class="hint">{{ t('platforms.owners_hint') }}</span></label>
+        <div class="row">
+          <input type="hidden" name="include_forks" value="0"><label class="chk"><input type="checkbox" name="include_forks" value="1"{% if access_values.include_forks %} checked{% endif %}>{{ t('platforms.include_forks') }}</label>
+          <input type="hidden" name="include_archived" value="0"><label class="chk"><input type="checkbox" name="include_archived" value="1"{% if access_values.include_archived %} checked{% endif %}>{{ t('platforms.include_archived') }}</label>
+          <input type="hidden" name="include_public" value="0"><label class="chk"><input type="checkbox" name="include_public" value="1"{% if access_values.include_public %} checked{% endif %}>{{ t('platforms.include_public') }}</label>
+          <input type="hidden" name="include_private" value="0"><label class="chk"><input type="checkbox" name="include_private" value="1"{% if access_values.include_private %} checked{% endif %}>{{ t('platforms.include_private') }}</label>
+        </div>
+        <span class="hint">{{ t('platforms.mirrors_skipped') }}</span>
+      </fieldset>
+
+      <fieldset class="platform-fieldset">
+        <legend>{{ t('platforms.rules') }}</legend>
+        <div class="segmented" role="radiogroup" aria-label="{{ t('platforms.rule_mode') }}">
+          <label><input type="radio" name="rule_mode" value="exclude"{% if access_values.rule_mode == 'exclude' %} checked{% endif %}>{{ t('platforms.rule_exclude') }}</label>
+          <label><input type="radio" name="rule_mode" value="include"{% if access_values.rule_mode == 'include' %} checked{% endif %}>{{ t('platforms.rule_include') }}</label>
+        </div>
+        <label class="field"><span class="include-patterns">{{ t('platforms.include_patterns') }}</span><span class="exclude-patterns">{{ t('platforms.exclude_patterns') }}</span><textarea name="patterns" class="mono">{{ access_values.patterns_text }}</textarea><span class="hint">{{ t('platforms.pattern_hint') }}</span></label>
+        <div class="row">
+          <input type="hidden" name="auto_enable" value="0"><label class="chk"><input type="checkbox" name="auto_enable" value="1"{% if access_values.auto_enable %} checked{% endif %}>{{ t('platforms.auto_enable') }}</label>
+          <input type="hidden" name="detailed_default" value="0"><label class="chk"><input type="checkbox" name="detailed_default" value="1"{% if access_values.detailed_default %} checked{% endif %}>{{ t('platforms.detailed_default') }}</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="platform-fieldset">
+        <legend>{{ t('platforms.schedule') }}</legend>
+        <div class="grid">
+          <label class="field">{{ t('platforms.discovery_interval') }}<input type="number" min="{{ min_discovery }}" step="1" name="discover_interval_minutes" value="{{ access_values.discover_interval_minutes }}"><span class="hint">{{ t('platforms.discovery_interval_hint', minimum=min_discovery) }}</span></label>
+          <label class="field">{{ t('platforms.sync_interval') }}<input type="number" min="{{ min_sync }}" step="1" name="default_sync_interval_minutes" value="{{ access_values.default_sync_interval_minutes }}"><span class="hint">{{ t('platforms.sync_interval_hint', minimum=min_sync) }}</span></label>
+        </div>
+        <span class="hint">{{ t('platforms.schedule_hint') }}</span>
+      </fieldset>
+
+      <section class="stack" aria-labelledby="preview-heading">
+        <div class="platform-header"><h3 id="preview-heading" style="margin:0">{{ t('platforms.preview') }}</h3><span class="muted">{{ t('platforms.preview_no_changes') }}</span></div>
+        {% if preview %}
+        <div class="summary-grid">
+          {% for summary in preview_summary %}<div class="metric summary-{{ summary.key }}"><small>{{ t('platforms.preview.' ~ summary.key) }}</small><strong>{{ summary.count }}</strong></div>{% endfor %}
+        </div>
+        <div class="preview-table">
+          {% for item in preview_items %}<div class="preview-row"><span class="mono preview-name">{{ item.name }}</span><span class="preview-reason">{% if item.reason_pattern %}{{ t(item.reason_key, pattern=item.reason_pattern) }}{% else %}{{ t(item.reason_key) }}{% endif %}</span><span class="pill preview-{{ item.category_key }}">{{ t('platforms.preview.' ~ item.category_key) }}</span></div>{% else %}<div class="empty">{{ t('platforms.preview_empty') }}</div>{% endfor %}
+        </div>
+        <p class="hint">{{ t('platforms.preview_note') }}</p>
+        {% else %}<div class="empty">{{ t('platforms.preview_empty') }}</div>{% endif %}
+        <div class="actions">
+          <button type="submit" class="small" formaction="/accesses/{{ selected_access.id }}">{{ t('platforms.save_apply') }}</button>
+          <button type="submit" class="secondary small" formaction="/accesses/{{ selected_access.id }}/preview">{{ t('platforms.preview') }}</button>
+          <a class="btn secondary small" href="/platforms?instance_id={{ selected_instance.id }}&amp;access_id={{ selected_access.id }}">{{ t('platforms.discard') }}</a>
+        </div>
+      </section>
+    </form>
+
+    {% if last_discovery_summary %}<p class="hint">{{ t('platforms.last_summary', created=last_discovery_summary.created|length, existing=last_discovery_summary.existing|length, disabled=last_discovery_summary.disabled|length, skipped=last_discovery_summary.skipped|length) }}</p>{% endif %}
+    {% else %}
+    <div class="empty"><h2 id="access-heading">{{ t('platforms.no_selected_access') }}</h2><p>{{ t('platforms.select_access_hint') }}</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+services:
+  gitwarden:
+    image: ${GW_IMAGE:-gitwarden:local}
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    env_file: .env
+    environment:
+      GW_PORT: ${GW_PORT:-8080}
+    volumes:
+      - gitwarden-data:/data
+    ports:
+      - "${GW_BIND:-127.0.0.1}:${GW_PORT:-8080}:${GW_PORT:-8080}"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  gitwarden-data:
+    name: gitwarden-data

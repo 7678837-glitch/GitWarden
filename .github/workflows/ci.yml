@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Lint, unit, and platform integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: 0.12.17
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Check lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run unit tests
+        run: uv run pytest -q
+
+      - name: Run Gitea and Forgejo integration tests
+        env:
+          GW_IT: "1"
+        run: uv run pytest -q tests/integration
+
+  containers:
+    name: Build and smoke-test ${{ matrix.arch }}
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          no-cache: true
+          tags: gitwarden:ci
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+
+      - name: Start the built image and verify health and login
+        shell: bash
+        env:
+          PLATFORM: linux/${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          export GW_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          trap 'docker rm -f gitwarden-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name gitwarden-smoke --platform "$PLATFORM" \
+            -e GW_ADMIN_PASSWORD -p 127.0.0.1:8080:8080 gitwarden:ci
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8080/health > /tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('/tmp/health.json').read_text())
+          assert data['version'] == Path('VERSION').read_text().strip()
+          assert data['git_commit'] == os.environ['GITHUB_SHA']
+          PY
+          curl --fail --silent http://127.0.0.1:8080/login -o /tmp/login.html
+          grep -q 'GitWarden' /tmp/login.html
+          test "$(docker exec gitwarden-smoke id -u)" = 10001
+
+  release:
+    name: Publish release image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - tests
+      - containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate release tag and image name
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$version" =~ ^[0-9]{8}\.[0-9]+$ ]]; then
+            echo "VERSION must match YYYYMMDD.N: $version" >&2
+            exit 1
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]{8}\.[0-9]+$ || "$tag" != "v$version" ]]; then
+            echo "release tag must be v$version, got $tag" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and publish release image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          no-cache: true
+          tags: |
+            ${{ steps.release.outputs.image }}:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image }}:latest
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}

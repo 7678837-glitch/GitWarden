@@ -1,0 +1,14 @@
+# The runtime image only needs the application, lockfile and release version.
+*
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!.python-version
+!VERSION
+!gitwarden/
+!gitwarden/**
+
+# Do not copy generated Python bytecode into the runtime image.
+gitwarden/**/__pycache__/
+gitwarden/**/*.pyc

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ t('logs.title') }}{% endblock %}
+{% block content %}
+<style>.run{border-bottom:1px solid #EEF1EE}.run-summary{display:flex;flex-wrap:wrap;align-items:center;gap:14px}.run-time{width:170px}.run-title{flex:1 1 260px;min-width:0}</style>
+<header class="page-header"><div>
+  <h1>{{ t('logs.title') }}</h1>
+  <p class="muted">{{ t('logs.description') }}</p>
+</div></header>
+
+<div class="tabs" role="tablist" aria-label="{{ t('logs.tab_label') }}">
+  <a href="{{ runs_url }}" role="tab" aria-selected="{{ 'true' if tab == 'runs' else 'false' }}" class="{% if tab == 'runs' %}active{% endif %}">{{ t('logs.runs') }}</a>
+  <a href="{{ activity_url }}" role="tab" aria-selected="{{ 'true' if tab == 'activity' else 'false' }}" class="{% if tab == 'activity' %}active{% endif %}">{{ t('logs.activity') }}</a>
+</div>
+
+{% if tab == 'runs' %}
+<section aria-label="{{ t('logs.runs') }}" class="stack">
+  <form method="get" action="/logs" class="filters">
+    <input type="hidden" name="tab" value="runs">
+    <label>{{ t('logs.task') }}
+      <select name="task_id">
+        <option value="">{{ t('logs.all_tasks') }}</option>
+        {% for item in tasks %}<option value="{{ item['id'] }}"{% if filters.task_id == item['id'] %} selected{% endif %}>{{ item['name'] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>{{ t('logs.result') }}
+      <select name="status">
+        <option value="">{{ t('logs.any_result') }}</option>
+        {% for key in ('ok', 'partial', 'failed', 'busy') %}<option value="{{ key }}"{% if filters.status == key %} selected{% endif %}>{{ t('logs.status.' + key) }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>{{ t('logs.period') }}
+      <select name="days">
+        <option value="">{{ t('logs.any_period') }}</option>
+        <option value="1"{% if filters.days == 1 %} selected{% endif %}>{{ t('logs.last_day') }}</option>
+        <option value="7"{% if filters.days == 7 %} selected{% endif %}>{{ t('logs.last_week') }}</option>
+        <option value="30"{% if filters.days == 30 %} selected{% endif %}>{{ t('logs.last_month') }}</option>
+      </select>
+    </label>
+    <label class="search">{{ t('logs.search') }}
+      <input type="search" name="search" value="{{ filters.search }}" placeholder="{{ t('logs.search_placeholder') }}">
+    </label>
+    <button type="submit" class="small">{{ t('logs.apply_filters') }}</button>
+  </form>
+
+  <section class="card" aria-label="{{ t('logs.runs') }}">
+    {% for run in runs %}
+    <details class="run" data-run-id="{{ run['id'] }}"{% if open_run_id == run['id'] %} open{% endif %}>
+      <summary class="run-summary">
+        <span class="mono muted run-time">{{ (run['finished_at'] or run['started_at'])|ts }}</span>
+        <span class="pill {{ run['status'] or 'info' }}">{{ t(run['status_key']) }}</span>
+        <div class="run-title"><strong>{{ run['task_name'] }}</strong><br>
+        <span class="muted">{{ run['message'] or t('logs.no_message') }} · {{ t('logs.seconds', value=run['duration']) }}</span></div>
+        <span class="btn secondary small">{{ t('logs.show_log') }}</span>
+      </summary>
+      <div class="detail-body stack">
+        <a href="/tasks/{{ run['task_id'] }}">{{ t('logs.open_task') }}</a>
+        {% if run['initial_backup'] and run['progress'] %}<pre class="log">{{ run['progress'] }}</pre>{% endif %}
+        <h2>{{ t('logs.steps') }}</h2>
+        {% if run['steps'] %}
+        <div class="table-wrap"><table class="tbl"><thead><tr><th>{{ t('logs.time') }}</th><th>{{ t('logs.step') }}</th><th>{{ t('logs.message') }}</th><th>{{ t('logs.duration') }}</th></tr></thead><tbody>
+          {% for step in run['steps'] %}<tr><td class="mono">{{ step['at']|ts }}</td><td>{{ t('logs.step.' + step['step']) }}{% if step['target_name'] %} · {{ step['target_name'] }}{% endif %}</td><td>{{ step['message'] or '' }}</td><td>{% if step['duration'] is not none %}{{ t('logs.seconds', value=step['duration']) }}{% else %}—{% endif %}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="empty">{{ t('logs.no_steps') }}</p>{% endif %}
+
+        <h2>{{ t('logs.refs') }}</h2>
+        {% if run['refs'] %}
+        <div class="table-wrap"><table class="tbl"><thead><tr><th>{{ t('logs.ref') }}</th><th>{{ t('logs.kind') }}</th><th>{{ t('logs.old') }}</th><th>{{ t('logs.new') }}</th></tr></thead><tbody>
+          {% for ref in run['refs'] %}<tr><td class="mono">{{ ref['ref'] }}</td><td>{{ ref['kind']|kind }}</td><td class="mono">{{ ref['old'] or '—' }}</td><td class="mono">{{ ref['new'] or '—' }}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="empty">{{ t('logs.no_refs') }}</p>{% endif %}
+
+        <h2>{{ t('logs.raw_output') }}</h2>
+        {% set raw_steps = run['steps']|selectattr('raw')|list %}
+        {% if raw_steps %}
+          {% for step in raw_steps %}<details class="raw"><summary>{{ t('logs.step.' + step['step']) }} · {{ t('logs.show_raw') }}</summary><pre class="log">{{ step['raw'] }}</pre></details>{% endfor %}
+        {% else %}<p class="empty">{{ t('logs.no_raw') }}</p>{% endif %}
+      </div>
+    </details>
+    {% else %}<p class="empty">{{ t('logs.empty_runs') }}</p>{% endfor %}
+    <div class="pagination">
+      <span>{{ t('logs.showing', start=range_start, end=range_end, total=total, kind=t('logs.runs')) }} · {{ t('logs.retained', days=retention_days) }}</span>
+      <span>{% if previous_url %}<a class="btn secondary small" href="{{ previous_url }}">{{ t('logs.previous') }}</a>{% endif %} {% if next_url %}<a class="btn secondary small" href="{{ next_url }}">{{ t('logs.next') }}</a>{% endif %}</span>
+    </div>
+  </section>
+</section>
+{% else %}
+<section aria-label="{{ t('logs.activity') }}" class="stack">
+  <form method="get" action="/logs" class="filters">
+    <input type="hidden" name="tab" value="activity">
+    <label>{{ t('logs.category') }}
+      <select name="category">
+        <option value="">{{ t('logs.all_categories') }}</option>
+        {% for key in ('login', 'task', 'target', 'credential', 'access', 'instance') %}<option value="{{ key }}"{% if filters.category == key %} selected{% endif %}>{{ t('logs.category.' + key) }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>{{ t('logs.period') }}
+      <select name="days">
+        <option value="">{{ t('logs.any_period') }}</option>
+        <option value="7"{% if filters.days == 7 %} selected{% endif %}>{{ t('logs.last_week') }}</option>
+        <option value="30"{% if filters.days == 30 %} selected{% endif %}>{{ t('logs.last_month') }}</option>
+      </select>
+    </label>
+    <button type="submit" class="small">{{ t('logs.apply_filters') }}</button>
+  </form>
+
+  <section class="card table-wrap" aria-label="{{ t('logs.activity') }}">
+    <table class="tbl"><thead><tr><th>{{ t('logs.time') }}</th><th>{{ t('logs.action') }}</th><th>{{ t('logs.object') }}</th><th>{{ t('logs.details') }}</th><th>{{ t('logs.from') }}</th></tr></thead><tbody>
+      {% for item in activity %}<tr><td class="mono">{{ item['at']|ts }}</td><td>{% if item['action_key'] %}{{ t(item['action_key']) }}{% else %}{{ item['action'] }}{% endif %}</td><td>{{ item['object'] or '—' }}</td><td class="muted">{{ item['detail'] or '—' }}</td><td class="mono">{{ item['ip'] or '—' }}</td></tr>
+      {% else %}<tr><td colspan="5" class="empty">{{ t('logs.empty_activity') }}</td></tr>{% endfor %}
+    </tbody></table>
+    <div class="pagination"><span>{{ t('logs.showing', start=range_start, end=range_end, total=total, kind=t('logs.activity')) }} · {{ t('logs.retained', days=retention_days) }}</span><span>{% if previous_url %}<a class="btn secondary small" href="{{ previous_url }}">{{ t('logs.previous') }}</a>{% endif %} {% if next_url %}<a class="btn secondary small" href="{{ next_url }}">{{ t('logs.next') }}</a>{% endif %}</span></div>
+  </section>
+</section>
+{% endif %}
+{% endblock %}

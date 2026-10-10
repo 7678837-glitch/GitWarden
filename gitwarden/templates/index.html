@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}{{ t('overview.title') }}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{{ t('overview.title') }}</h1>
+    <p>{{ t('overview.subtitle') }}</p>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/platforms">{{ t('overview.action.connect_platform') }}</a>
+    <a class="btn" href="/tasks/new">{{ t('overview.action.backup_repository') }}</a>
+  </div>
+</header>
+
+<section class="stats" aria-label="{{ t('overview.stats.label') }}">
+  <div class="card stat">
+    <span class="muted">{{ t('overview.stats.active') }}</span>
+    <strong>{{ stats.active }}</strong>
+    <span class="hint">{{ t('overview.stats.disabled_caption', count=stats.disabled) }}</span>
+  </div>
+  <div class="card stat">
+    <span class="muted">{{ t('overview.stats.healthy') }}</span>
+    <strong class="ok">{{ stats.healthy }}</strong>
+    <span class="hint">{{ t('overview.stats.healthy_caption') }}</span>
+  </div>
+  <div class="card stat{% if stats.attention %} warn{% endif %}">
+    <span class="muted">{{ t('overview.stats.attention') }}</span>
+    <strong class="warn">{{ stats.attention }}</strong>
+    <span class="hint">{{ t('overview.stats.attention_caption') }}</span>
+  </div>
+  <div class="card stat">
+    <span class="muted">{{ t('overview.stats.incomplete') }}</span>
+    <strong>{{ stats.incomplete }}</strong>
+    <span class="hint">{{ t('overview.stats.incomplete_caption') }}</span>
+  </div>
+</section>
+
+<section aria-labelledby="attention-title" class="card">
+  <div class="card-header">
+    <h2 id="attention-title">{{ t('overview.attention.title') }}</h2>
+    <span class="hint">{{ t('overview.attention.subtitle') }}</span>
+  </div>
+  {% for row in attention %}
+  <div class="row" style="padding:16px 20px;border-bottom:1px solid #EEF1EE;align-items:center">
+    <span class="pill {{ row.status_class or 'warn' }}">{{ t(row.status_label_key) }}</span>
+    <div style="flex:1 1 320px;min-width:0">
+      <div>
+        <a href="/tasks/{{ row.id }}" style="font-weight:600">{{ row.name }}</a>
+        {% if row.targets %}<span class="muted"> → {{ row.targets[0].name }}</span>{% endif %}
+      </div>
+      <div class="hint">
+        {% if row.overdue %}
+          {{ t('overview.attention.overdue_reason', minutes=row.overdue_minutes) }}
+        {% elif row.external_note %}
+          {{ t('overview.attention.incomplete_reason', note=row.external_note|msg) }}
+        {% elif row.last_status and row.last_status != 'ok' %}
+          {{ t('overview.attention.failed_reason') }}
+        {% elif row.managed_state != 'active' %}
+          {{ t('overview.attention.managed_state_reason', state=t(row.status_label_key)) }}
+        {% else %}
+          {{ t('overview.attention.target_reason') }}
+        {% endif %}
+      </div>
+    </div>
+    <a class="btn secondary small" href="/tasks/{{ row.id }}">{{ t('overview.attention.review') }}</a>
+  </div>
+  {% else %}
+  <div class="empty">{{ t('overview.attention.empty') }}</div>
+  {% endfor %}
+</section>
+
+<div class="split">
+  <section aria-labelledby="overview-tasks-title" class="card wide table-wrap">
+    <div class="card-header">
+      <h2 id="overview-tasks-title">{{ t('overview.tasks.title') }} <a href="/tasks" class="hint">{{ t('overview.tasks.view_all') }}</a></h2>
+      <span class="hint">{{ t('overview.tasks.subtitle') }}</span>
+    </div>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">{{ t('overview.tasks.task') }}</th>
+          <th scope="col">{{ t('overview.tasks.targets') }}</th>
+          <th scope="col">{{ t('overview.tasks.last_success') }}</th>
+          <th scope="col">{{ t('overview.tasks.preserved') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in tasks %}
+        <tr>
+          <td>
+            <a href="/tasks/{{ row.id }}" style="font-weight:600">{{ row.name }}</a>
+            <div class="mono muted">{{ row.source_url }}</div>
+            {% if not row.complete %}<span class="pill warn">{{ t('tasks.status.incomplete') }}</span>{% endif %}
+          </td>
+          <td>
+            {% for target in row.targets %}
+            <span class="pill {{ target.status_class }}">{{ target.name }} · {{ t(target.status_key) }}</span>
+            {% else %}
+            <span class="pill">{{ t('tasks.target.none') }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            {% if row.run_running %}
+              <span class="info">{{ t('tasks.run.running') }}</span>
+              {% if row.initial_backup and row.run_progress %}<div class="hint">{{ row.run_progress|progress_summary }}</div>{% endif %}
+            {% else %}
+              {{ row.last_success_at|ago }}
+            {% endif %}
+          </td>
+          <td>{{ row.preserved_count }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">{{ t('overview.tasks.empty') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <div class="aside stack">
+    <section aria-labelledby="events-title" class="card padded stack">
+      <h2 id="events-title">{{ t('overview.events.title') }}</h2>
+      {% for event in events %}
+      <div class="row" style="align-items:flex-start;gap:12px">
+        <span aria-hidden="true" style="flex:none;width:10px;height:10px;margin-top:7px;border-radius:50%;background:#9A4A00"></span>
+        <div style="min-width:0">
+          <div>{{ t(event.kind_key) }} · <span class="mono" title="{{ event.ref }}">{{ event.ref|replace('refs/heads/', '')|replace('refs/tags/', '') }}</span></div>
+          <div class="hint">{{ event.task_name }} · {{ event.at|ago }}</div>
+          {% if event.old or event.new %}<div class="mono muted">{{ event.old|short }} → {{ event.new|short }}</div>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">{{ t('overview.events.empty') }}</div>
+      {% endfor %}
+      <a href="/logs">{{ t('overview.events.all') }}</a>
+    </section>
+
+    <section aria-labelledby="runs-title" class="card padded stack">
+      <h2 id="runs-title">{{ t('overview.runs.title') }}</h2>
+      {% for run in runs %}
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <span class="mono muted">{{ run.started_at|ago }}</span>
+        <span style="flex:1;min-width:0">{{ run.task_name }}</span>
+        <span class="{{ 'ok' if run.status == 'ok' else 'warn' }}">{{ t(run.status_key) }}</span>
+      </div>
+      {% else %}
+      <div class="empty">{{ t('overview.runs.empty') }}</div>
+      {% endfor %}
+      <a href="/logs">{{ t('overview.runs.open_logs') }}</a>
+    </section>
+  </div>
+</div>
+{% endblock %}

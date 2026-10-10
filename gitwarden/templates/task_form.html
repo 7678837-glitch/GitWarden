@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}{{ t('wizard.title') }}{% endblock %}
+{% block content %}
+<div class="wizard stack">
+  <header class="page-header">
+    <div>
+      <h1>{{ t('wizard.title') }}</h1>
+      <p>{{ t('wizard.subtitle') }} <a href="/platforms">{{ t('wizard.platform_link') }}</a>.</p>
+    </div>
+  </header>
+
+  <ol class="steps" aria-label="{{ t('wizard.steps_label') }}">
+    <li class="{% if step == 'source' %}active{% elif step in ('targets', 'review') %}done{% endif %}">
+      <span>{{ t('wizard.step_number', number=1) }}</span><strong>{{ t('wizard.step_source') }}</strong>
+    </li>
+    <li class="{% if step == 'targets' %}active{% elif step == 'review' %}done{% endif %}">
+      <span>{{ t('wizard.step_number', number=2) }}</span><strong>{{ t('wizard.step_targets') }}</strong>
+    </li>
+    <li class="{% if step == 'review' %}active{% endif %}">
+      <span>{{ t('wizard.step_number', number=3) }}</span><strong>{{ t('wizard.step_review') }}</strong>
+    </li>
+  </ol>
+
+  {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+
+  <section class="card padded">
+    <form method="post" action="/tasks/new" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="step" value="{{ step }}">
+      {% if step != 'targets' %}<input type="hidden" name="mode" value="{{ mode }}">{% endif %}
+
+      {% if step == 'source' %}
+        <h2>{{ t('wizard.source_title') }}</h2>
+        {% include "_task_fields.html" %}
+        <input type="hidden" name="target_name" value="{{ target_values['name'] }}">
+        <input type="hidden" name="main_url" value="{{ target_values['main_url'] }}">
+        <input type="hidden" name="history_url" value="{{ target_values['history_url'] }}">
+        <input type="hidden" name="target_cred_id" value="{{ target_values['cred_id'] }}">
+        <input type="hidden" name="access_id" value="{{ provision_values['access_id'] }}">
+        <input type="hidden" name="owner" value="{{ provision_values['owner'] }}">
+        <input type="hidden" name="provision_name" value="{{ provision_values['name'] }}">
+        <div class="actions" style="justify-content:flex-end">
+          <a class="btn secondary" href="/">{{ t('common.action.cancel') }}</a>
+          <button type="submit">{{ t('wizard.next_targets') }}</button>
+        </div>
+
+      {% elif step == 'targets' %}
+        <h2>{{ t('wizard.targets_title') }}</h2>
+        <p class="muted">{{ t('wizard.targets_intro') }}</p>
+        <input type="hidden" name="name" value="{{ values['name'] }}">
+        <input type="hidden" name="source_url" value="{{ values['source_url'] }}">
+        <input type="hidden" name="source_cred_id" value="{{ values['source_cred_id'] }}">
+        <input type="hidden" name="interval_minutes" value="{{ values['interval_minutes'] }}">
+        <input type="hidden" name="enabled" value="{{ 1 if values['enabled'] else 0 }}">
+
+        <fieldset>
+          <legend>{{ t('wizard.target_mode') }}</legend>
+          <div class="grid">
+            <label class="card padded field">
+              <span class="row"><input type="radio" name="mode" value="platform"{% if mode == 'platform' %} checked{% endif %}> <strong>{{ t('wizard.mode_platform') }}</strong></span>
+              <span class="hint">{{ t('wizard.mode_platform_hint') }}</span>
+            </label>
+            <label class="card padded field">
+              <span class="row"><input type="radio" name="mode" value="manual"{% if mode == 'manual' %} checked{% endif %}> <strong>{{ t('wizard.mode_manual') }}</strong></span>
+              <span class="hint">{{ t('wizard.mode_manual_hint') }}</span>
+            </label>
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <button type="submit" name="change_mode" value="platform" class="secondary" formnovalidate>{{ t('wizard.switch_platform') }}</button>
+            <button type="submit" name="change_mode" value="manual" class="secondary" formnovalidate>{{ t('wizard.switch_manual') }}</button>
+          </div>
+        </fieldset>
+
+        {% if mode == 'platform' %}
+          <div class="grid">
+            <label class="field">{{ t('field.access') }}
+              <select name="access_id" required>
+                <option value="">{{ t('wizard.select_platform') }}</option>
+                {% for p in platforms %}
+                <option value="{{ p['id'] }}"{% if provision_values['access_id']|string == p['id']|string %} selected{% endif %}>{{ p['label'] }}</option>
+                {% endfor %}
+              </select>
+              <span class="hint">{{ t('wizard.platform_target_hint') }}</span>
+            </label>
+            <label class="field">{{ t('field.owner') }}
+              <input name="owner" required value="{{ provision_values['owner'] }}">
+            </label>
+            <label class="field">{{ t('field.target') }}
+              <input name="target_name" required value="{{ provision_values['name'] }}">
+              <span class="hint">{{ t('wizard.platform_name_hint') }}</span>
+            </label>
+          </div>
+        {% else %}
+          <div class="stack">
+            <label class="field">{{ t('wizard.target_name') }}
+              <input name="target_name" value="{{ target_values['name'] }}" placeholder="{{ t('wizard.target_default') }}">
+            </label>
+            <label class="field">{{ t('wizard.mirror_url') }}
+              <input name="main_url" required value="{{ target_values['main_url'] }}" class="mono">
+            </label>
+            <label class="field">{{ t('wizard.history_url') }}
+              <input name="history_url" required value="{{ target_values['history_url'] }}" class="mono">
+            </label>
+            <label class="field">{{ t('wizard.target_credential') }}
+              <select name="target_cred_id">
+                <option value="">{{ t('wizard.credential_none') }}</option>
+                {% for c in creds %}
+                <option value="{{ c.id }}"{% if target_values['cred_id']|string == c.id|string %} selected{% endif %}>{{ c.name }} · {{ c.kind|cred_kind }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+        {% endif %}
+
+        <div class="actions" style="justify-content:space-between">
+          <button type="submit" class="secondary" name="back" value="1" formnovalidate>{{ t('wizard.back') }}</button>
+          <button type="submit">{{ t('wizard.next_review') }}</button>
+        </div>
+
+      {% else %}
+        <h2>{{ t('wizard.review_title') }}</h2>
+        <dl>
+          <dt>{{ t('wizard.review_source') }}</dt><dd class="mono">{{ values['source_url'] }}</dd>
+          <dt>{{ t('wizard.review_target') }}</dt>
+          <dd>
+            {% if mode == 'platform' %}
+              {{ provision_values['owner'] }}/{{ provision_values['name'] }} · {{ t('wizard.created_on_platform') }}
+            {% else %}
+              <span class="mono">{{ target_values['main_url'] }}</span><br><span class="mono">{{ target_values['history_url'] }}</span>
+            {% endif %}
+          </dd>
+          <dt>{{ t('wizard.review_interval') }}</dt><dd>{{ t('wizard.every_minutes', minutes=values['interval_minutes']) }}</dd>
+        </dl>
+        <input type="hidden" name="name" value="{{ values['name'] }}">
+        <input type="hidden" name="source_url" value="{{ values['source_url'] }}">
+        <input type="hidden" name="source_cred_id" value="{{ values['source_cred_id'] }}">
+        <input type="hidden" name="interval_minutes" value="{{ values['interval_minutes'] }}">
+        <input type="hidden" name="enabled" value="{{ 1 if values['enabled'] else 0 }}">
+        {% if mode == 'platform' %}
+          <input type="hidden" name="access_id" value="{{ provision_values['access_id'] }}">
+          <input type="hidden" name="owner" value="{{ provision_values['owner'] }}">
+          <input type="hidden" name="target_name" value="{{ provision_values['name'] }}">
+        {% else %}
+          <input type="hidden" name="target_name" value="{{ target_values['name'] }}">
+          <input type="hidden" name="main_url" value="{{ target_values['main_url'] }}">
+          <input type="hidden" name="history_url" value="{{ target_values['history_url'] }}">
+          <input type="hidden" name="target_cred_id" value="{{ target_values['cred_id'] }}">
+        {% endif %}
+
+        <fieldset>
+          <legend>{{ t('wizard.prerequisites_title') }}</legend>
+          <label class="chk"><input type="checkbox" name="confirm_writer" value="on"{% if confirm_values['writer'] %} checked{% endif %}> {{ t('wizard.prerequisite_writer') }}</label>
+          <label class="chk"><input type="checkbox" name="confirm_private" value="on"{% if confirm_values['private'] %} checked{% endif %}> {{ t('wizard.prerequisite_private') }}</label>
+          <label class="chk"><input type="checkbox" name="confirm_no_ci" value="on"{% if confirm_values['no_ci'] %} checked{% endif %}> {{ t('wizard.prerequisite_no_ci') }}</label>
+        </fieldset>
+        <p class="hint">{{ t('wizard.review_hint') }}</p>
+        <div class="actions" style="justify-content:space-between">
+          <button type="submit" class="secondary" name="back" value="1" formnovalidate>{{ t('wizard.back') }}</button>
+          <button type="submit">{{ t('wizard.create_run') }}</button>
+        </div>
+      {% endif %}
+    </form>
+  </section>
+</div>
+{% endblock %}

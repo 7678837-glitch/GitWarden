@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ t("login.title") }}{% endblock %}
+{% block content %}
+<section class="card padded narrow">
+  <h1>{{ t("login.title") }}</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/login" class="form">
+    <label for="password">{{ t("login.password") }}</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <div class="actions"><button type="submit">{{ t("login.submit") }}</button></div>
+  </form>
+</section>
+{% endblock %}

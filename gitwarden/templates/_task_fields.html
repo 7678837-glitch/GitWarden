@@ -1,0 +1,29 @@
+<label class="field" for="task-name">
+  {{ t('field.name') }}
+  <input id="task-name" name="name" required value="{{ values['name'] }}">
+  <span class="hint">{{ t('wizard.name_hint') }}</span>
+</label>
+<label class="field" for="task-url">
+  {{ t('field.source') }}
+  <input id="task-url" name="source_url" required value="{{ values['source_url'] }}" class="mono"
+         placeholder="https://example.com/org/repo.git">
+  <span class="hint">{{ t('wizard.source_hint') }}</span>
+</label>
+<div class="grid">
+  <label class="field" for="task-cred">
+    {{ t('wizard.source_credential') }}
+    <select id="task-cred" name="source_cred_id">
+      <option value="">{{ t('wizard.credential_none') }}</option>
+      {% for c in creds %}
+      <option value="{{ c.id }}"{% if values['source_cred_id']|string == c.id|string %} selected{% endif %}>{{ c.name }} · {{ c.kind|cred_kind }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="field" for="task-interval">
+    {{ t('field.interval') }}
+    <input id="task-interval" name="interval_minutes" type="number" min="{{ min_sync_minutes }}" step="1" required
+           value="{{ values['interval_minutes'] }}">
+    <span class="hint">{{ t('wizard.interval_hint', minimum=min_sync_minutes) }}</span>
+  </label>
+</div>
+<label class="chk"><input type="hidden" name="enabled" value="0"><input type="checkbox" name="enabled" value="1"{% if values['enabled'] %} checked{% endif %}> {{ t('wizard.enabled') }}</label>
