@@ -591,6 +591,7 @@ def _task_page(
     error: str | None = None,
     task_values: dict | None = None,
     target_values: dict | None = None,
+    target_edit: dict | None = None,
     provision_values: dict | None = None,
     edit_open: bool = False,
 ):
@@ -604,6 +605,7 @@ def _task_page(
         error=error,
         task_values=task_values,
         target_values=target_values,
+        target_edit=target_edit,
         provision_values=provision_values,
         edit_open=edit_open,
     )
@@ -1155,6 +1157,13 @@ def create_app(config: Config, start_scheduler: bool = True) -> FastAPI:
     ):
         store = _store(request)
         target = _require_target(store, target_id)
+        values = {
+            "id": target_id,
+            "name": name,
+            "main_url": main_url,
+            "history_url": history_url,
+            "cred_id": cred_id,
+        }
         try:
             cred = _cred_id(cred_id)
             if cred is not None and store.get_cred(cred) is None:
@@ -1174,6 +1183,7 @@ def create_app(config: Config, start_scheduler: bool = True) -> FastAPI:
                 target["task_id"],
                 400,
                 error=_redact(_db_error(exc), store.secret_values()),
+                target_edit=values,
             )
         if (main_url, history_url) != (target["main_url"], target["history_url"]):
             # 旧地址的推送记录不对应新远端，写库成功后再清，避免失败的编辑损坏原目标的记录。

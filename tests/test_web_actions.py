@@ -708,3 +708,93 @@ def test_identical_local_target_urls_ignore_surrounding_whitespace(client, opera
             store.add_target(task_id, "duplicate", "/tmp/mirror.git", " /tmp/mirror.git/ ")
         else:
             store.update_target(target, history_url=" /tmp/mirror.git/ ")
+
+
+def _target_edit_form(page, target_id):
+    match = re.search(
+        rf"<details([^>]*)>\s*<summary>[^<]*</summary>\s*"
+        rf'(<form method="post" action="/targets/{target_id}/edit".*?</form>)',
+        page,
+        re.DOTALL,
+    )
+    assert match, "目标编辑表单缺失"
+    return match.groups()
+
+
+@pytest.mark.parametrize("failure", ["same_urls", "invalid_url", "empty_name"])
+def test_target_edit_failure_keeps_draft_and_opens_only_its_form(client, failure):
+    from html import unescape
+
+    login(client)
+    store, task_id, target_id = _task_and_target(client)
+    store.set_bound(target_id, True)
+    original = store.get_target(target_id)
+    other_id = store.add_target(
+        task_id, "other", "https://target.example/other.git", "https://target.example/other-h.git"
+    )
+    credential = store.add_cred("selected", "https", secret="draft-test-secret")
+    draft = {
+        "name": 'Draft <backup> "quoted"',
+        "main_url": "https://target.example/new.git",
+        "history_url": "https://target.example/new-history.git",
+        "cred_id": str(credential),
+    }
+    if failure == "same_urls":
+        draft["history_url"] = draft["main_url"] + "/"
+    elif failure == "invalid_url":
+        draft["main_url"] = "ext::invalid"
+    else:
+        draft["name"] = ""
+    response = client.post(
+        f"/targets/{target_id}/edit",
+        data={"csrf": csrf_of(client), **draft},
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    attrs, form = _target_edit_form(response.text, target_id)
+    assert "open" in attrs
+    for field in ("name", "main_url", "history_url"):
+        value = re.search(rf'name="{field}"[^>]*value="([^"]*)"', form).group(1)
+        assert unescape(value) == draft[field]
+    assert "<backup>" not in form
+    assert f'<option value="{credential}" selected>' in form
+    assert "open" not in _target_edit_form(response.text, other_id)[0]
+    assert 'name="name" required value=""' in response.text.split('id="add-target"', 1)[1]
+    assert store.get_target(target_id) == original
+    assert "draft-test-secret" not in response.text
+
+    draft.update(
+        name="corrected", main_url=original["main_url"], history_url=original["history_url"]
+    )
+    saved = client.post(
+        f"/targets/{target_id}/edit",
+        data={"csrf": csrf_of(client), **draft},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    target = store.get_target(target_id)
+    assert target["name"] == "corrected" and target["cred_id"] == credential
+    assert target["bound"] == 1
+    assert "open" not in _target_edit_form(client.get(saved.headers["location"]).text, target_id)[0]
+
+
+def test_target_edit_error_draft_does_not_echo_url_credentials_or_stored_secrets(client):
+    login(client)
+    store, _, target_id = _task_and_target(client)
+    store.add_cred("private", "https", secret="stored-secret")
+    response = client.post(
+        f"/targets/{target_id}/edit",
+        data={
+            "csrf": csrf_of(client),
+            "name": "draft stored-secret",
+            "main_url": "https://bot:embedded-secret@target.example/new.git",
+            "history_url": "https://target.example/new-history.git",
+            "cred_id": "",
+        },
+    )
+    assert response.status_code == 400
+    attrs, form = _target_edit_form(response.text, target_id)
+    assert "open" in attrs
+    assert 'value="draft ***"' in form
+    assert "embedded-secret" not in response.text and "stored-secret" not in response.text
+    assert 'value="https://target.example/new-history.git"' in form

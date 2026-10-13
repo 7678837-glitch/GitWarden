@@ -63,14 +63,16 @@
           <form method="post" action="/targets/{{ target['id'] }}/audit" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary small">{{ t('common.action.audit') }}</button></form>
           <a class="btn secondary small" href="/logs?task_id={{ task['id'] }}">{{ t('task.view_log') }}</a>
         </div>
-        <details>
+        {% set editing = target_edit and target_edit['id'] == target['id'] %}
+        {% set target_form = target_edit if editing else target %}
+        <details{% if editing %} open{% endif %}>
           <summary>{{ t('task.edit_target') }}</summary>
           <form method="post" action="/targets/{{ target['id'] }}/edit" class="form">
             <input type="hidden" name="csrf" value="{{ csrf }}">
-            <label class="field">{{ t('wizard.target_name') }}<input name="name" required value="{{ target['name'] }}"></label>
-            <label class="field">{{ t('wizard.mirror_url') }}<input name="main_url" required value="{{ target['main_url'] }}" class="mono"></label>
-            <label class="field">{{ t('wizard.history_url') }}<input name="history_url" required value="{{ target['history_url'] }}" class="mono"></label>
-            <label class="field">{{ t('wizard.target_credential') }}<select name="cred_id"><option value="">{{ t('wizard.credential_none') }}</option>{% for c in creds %}<option value="{{ c['id'] }}"{% if target['cred_id']|string == c['id']|string %} selected{% endif %}>{{ c['name'] }} · {{ c['kind']|cred_kind }}</option>{% endfor %}</select></label>
+            <label class="field">{{ t('wizard.target_name') }}<input name="name" required value="{{ target_form['name'] }}"></label>
+            <label class="field">{{ t('wizard.mirror_url') }}<input name="main_url" required value="{{ target_form['main_url'] }}" class="mono"></label>
+            <label class="field">{{ t('wizard.history_url') }}<input name="history_url" required value="{{ target_form['history_url'] }}" class="mono"></label>
+            <label class="field">{{ t('wizard.target_credential') }}<select name="cred_id"><option value="">{{ t('wizard.credential_none') }}</option>{% for c in creds %}<option value="{{ c['id'] }}"{% if target_form['cred_id']|string == c['id']|string %} selected{% endif %}>{{ c['name'] }} · {{ c['kind']|cred_kind }}</option>{% endfor %}</select></label>
             <p class="hint">{{ t('task.edit_target_hint') }}</p>
             <div class="actions"><button type="submit" class="small">{{ t('common.action.save') }}</button></div>
           </form>

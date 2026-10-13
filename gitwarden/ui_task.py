@@ -289,6 +289,7 @@ def detail_page(
     error: str | None = None,
     task_values: dict | None = None,
     target_values: dict | None = None,
+    target_edit: dict | None = None,
     provision_values: dict | None = None,
     edit_open: bool = False,
 ):
@@ -296,6 +297,13 @@ def detail_page(
     task = _require_task(store, task_id)
     raw_targets = store.list_targets(task_id)
     secrets = store.secret_values()
+    if target_edit is not None:
+        target_edit = {
+            **target_edit,
+            "name": _redact(target_edit["name"], secrets),
+            "main_url": _safe_url(target_edit["main_url"], secrets),
+            "history_url": _safe_url(target_edit["history_url"], secrets),
+        }
     safe_targets = [
         {
             **row,
@@ -356,6 +364,7 @@ def detail_page(
         task_values=task_values or _task_values_from_row(task),
         target_values=target_values
         or {"name": "", "main_url": "", "history_url": "", "cred_id": ""},
+        target_edit=target_edit,
         provision_values=provision_values or {"access_id": "", "owner": "", "name": ""},
         edit_open=edit_open,
         min_sync_minutes=store.min_sync_minutes,
