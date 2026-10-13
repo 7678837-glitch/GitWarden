@@ -20,7 +20,7 @@ def redact_text(store: Store, text: str | None) -> str | None:
 
 
 def truncate_utf8(text: str | None, max_bytes: int = MAX_RAW_BYTES) -> str | None:
-    """按 UTF-8 字节数截断文本，并保留可读的截断字节数标记。"""
+    """按 UTF-8 字节数保留末尾，把截断字节数标记放在开头。"""
     if text is None:
         return None
     encoded = text.encode("utf-8")
@@ -30,13 +30,13 @@ def truncate_utf8(text: str | None, max_bytes: int = MAX_RAW_BYTES) -> str | Non
     keep = max_bytes - len("…[truncated 0 bytes]".encode())
     keep = max(0, keep)
     while True:
-        prefix = encoded[:keep].decode("utf-8", errors="ignore")
-        kept_bytes = len(prefix.encode("utf-8"))
+        tail = encoded[len(encoded) - keep :].decode("utf-8", errors="ignore")
+        kept_bytes = len(tail.encode("utf-8"))
         omitted = len(encoded) - kept_bytes
-        suffix = f"…[truncated {omitted} bytes]"
-        if kept_bytes + len(suffix.encode("utf-8")) <= max_bytes:
-            return prefix + suffix
-        keep = max(0, keep - max(1, kept_bytes + len(suffix.encode("utf-8")) - max_bytes))
+        marker = f"…[truncated {omitted} bytes]"
+        if kept_bytes + len(marker.encode("utf-8")) <= max_bytes:
+            return marker + tail
+        keep = max(0, keep - max(1, kept_bytes + len(marker.encode("utf-8")) - max_bytes))
 
 
 def _prepare(store: Store, text: str | None, *, truncate: bool = False) -> str | None:

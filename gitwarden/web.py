@@ -26,13 +26,14 @@ from starlette.background import BackgroundTask
 
 from gitwarden.archive import ArchiveBusy
 from gitwarden.config import Config
-from gitwarden.db import Store
+from gitwarden.db import Store, now
 from gitwarden.git import GitError, run
 from gitwarden.i18n import (
     CSRF_COOKIE,
     DEFAULT_LANG,
     LANG_COOKIE,
     language_for_cookie,
+    msg,
     normalize_lang,
     render,
     reset_language,
@@ -250,6 +251,7 @@ def _db_error(exc: Exception) -> str:
         ("URL 不得内嵌凭据", "error.url_credentials"),
         ("URL 协议", "error.url_protocol"),
         ("URL 缺少主机", "error.url_host"),
+        ("主镜像与历史仓地址必须不同", "error.target_urls_same"),
         ("平台地址必须", "error.platform_url"),
         ("接入凭据必须", "error.access_credential"),
         ("接入范围必须", "error.scope"),
@@ -661,6 +663,10 @@ def create_app(config: Config, start_scheduler: bool = True) -> FastAPI:
             min_sync_minutes=config.min_sync_minutes,
             min_discovery_minutes=config.min_discovery_minutes,
         )
+        store._exec(
+            "UPDATE runs SET finished_at=?, status='failed', message=? WHERE finished_at IS NULL",
+            (now(), msg("run.interrupted")),
+        )
         scheduler = Scheduler(
             store,
             config.data_dir,
@@ -827,12 +833,15 @@ def create_app(config: Config, start_scheduler: bool = True) -> FastAPI:
         enabled: Annotated[str | None, Form()] = None,
     ):
         store = _store(request)
-        _require_task(store, task_id)
+        task = _require_task(store, task_id)
         values = _task_values(
             name, source_url, source_cred_id, interval_minutes, _form_bool(enabled)
         )
         try:
-            store.update_task(task_id, **_parse_task(values))
+            fields = _parse_task(values)
+            if fields["interval_minutes"] != task["interval_minutes"]:
+                fields["next_run_at"] = None
+            store.update_task(task_id, **fields)
         except (ValueError, sqlite3.IntegrityError) as exc:
             return _task_page(
                 request,

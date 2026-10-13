@@ -56,7 +56,7 @@ def test_step_and_activity_redact_secrets_and_bound_raw_by_utf8_bytes(tmp_path):
     assert secret not in step["message"]
     assert secret not in step["raw"]
     assert len(step["raw"].encode("utf-8")) <= 64 * 1024
-    assert re.search(r"…\[truncated \d+ bytes\]$", step["raw"])
+    assert re.search(r"^…\[truncated \d+ bytes\]", step["raw"])
 
     [activity] = logs.query_activity(store, page_size=20)[0]
     assert secret not in activity["detail"]
@@ -110,3 +110,14 @@ def test_cleanup_removes_old_runs_steps_refs_activity_but_keeps_events(tmp_path)
     assert logs.list_refs(store, old_run) == []
     assert logs.query_activity(store, page_size=20)[1] == 0
     assert len(store.list_events(task_id)) == 1
+
+
+def test_truncated_raw_keeps_the_error_tail_and_marks_the_omitted_prefix():
+    text = "进度\n" * 30000 + "fatal: last error\n"
+    result = logs.truncate_utf8(text)
+    assert result.startswith("…[truncated ")
+    assert result.endswith("fatal: last error\n")
+    assert len(result.encode()) <= logs.MAX_RAW_BYTES
+    omitted = int(re.search(r"truncated (\d+) bytes", result).group(1))
+    tail = result.split("]", 1)[1]
+    assert omitted + len(tail.encode()) == len(text.encode())

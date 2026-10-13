@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from gitwarden.creds import check_url
+from gitwarden.creds import check_target_urls, check_url
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS creds(id INTEGER PRIMARY KEY,
@@ -552,8 +552,7 @@ class Store:
     def add_target(
         self, task_id: int, name: str, main_url: str, history_url: str, cred_id: int | None = None
     ) -> int:
-        check_url(main_url)
-        check_url(history_url)
+        check_target_urls(main_url, history_url)
         return self._exec(
             "INSERT INTO targets(task_id,name,main_url,history_url,cred_id) VALUES(?,?,?,?,?)",
             (task_id, name, main_url, history_url, cred_id),
@@ -568,10 +567,16 @@ class Store:
         return self._rows("SELECT * FROM targets WHERE task_id=? ORDER BY id", (task_id,))
 
     def update_target(self, target_id: int, **fields: Any) -> None:
-        for key in ("main_url", "history_url"):
-            if key in fields:
-                check_url(fields[key])
         current = self.get_target(target_id)
+        if current:
+            check_target_urls(
+                fields.get("main_url", current["main_url"]),
+                fields.get("history_url", current["history_url"]),
+            )
+        else:
+            for key in ("main_url", "history_url"):
+                if key in fields:
+                    check_url(fields[key])
         if current and any(
             key in fields and fields[key] != current[key] for key in ("main_url", "history_url")
         ):

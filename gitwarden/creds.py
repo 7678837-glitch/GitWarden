@@ -29,6 +29,13 @@ def check_url(url: str) -> None:
         raise ValueError(f"URL 缺少主机: {url!r}")
 
 
+def check_target_urls(main_url: str, history_url: str) -> None:
+    if main_url.strip().rstrip("/") == history_url.strip().rstrip("/"):
+        raise ValueError("主镜像与历史仓地址必须不同")
+    check_url(main_url)
+    check_url(history_url)
+
+
 @contextmanager
 def git_env(cred: Mapping[str, str | None] | None, workdir: Path) -> Iterator[dict[str, str]]:
     home = workdir / "home"

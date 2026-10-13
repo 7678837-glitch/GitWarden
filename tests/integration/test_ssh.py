@@ -11,6 +11,7 @@ import pytest
 from gitwarden.creds import git_env
 from gitwarden.db import Store
 from gitwarden.git import run
+from gitwarden.logs import list_steps
 from gitwarden.runner import archive_path, bind_target, run_task
 from tests.conftest import commit, make_source
 from tests.integration.conftest import PlatformEnvironment
@@ -118,7 +119,9 @@ def test_wrong_ssh_host_key_fails_without_private_key_or_file_leak(ssh_forge, ca
     assert forge.store.get_task(task_id)["last_status"] == "failed"
     result = forge.store.list_runs(task_id)[0]
     assert result["status"] == "failed"
-    assert "REMOTE HOST IDENTIFICATION HAS CHANGED" in result["message"]
-    text = result["message"] + caplog.text
+    assert "Host key verification failed" in result["message"]
+    raw = "\n".join(step["raw"] or "" for step in list_steps(forge.store, result["id"]))
+    assert "REMOTE HOST IDENTIFICATION HAS CHANGED" in raw
+    text = result["message"] + raw + caplog.text
     assert all(line not in text for line in cred["private_key"].splitlines())
     assert not list((forge.data / "work").glob("ssh-*"))

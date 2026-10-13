@@ -564,5 +564,8 @@
   "creds.edit_named": "修改 {name}",
   "creds.edit_hint": "密码/令牌或私钥留空表示保持原值。所有引用在下次运行时使用修改后的凭据，类型不可更改。",
   "error.credential_type_immutable": "凭据类型不可更改。",
-  "logs.activity.credential_update": "修改凭据"
+  "logs.activity.credential_update": "修改凭据",
+  "logs.step.maintenance": "档案整理",
+  "run.interrupted": "服务重启时中断",
+  "error.target_urls_same": "主镜像与历史仓地址必须不同"
 }

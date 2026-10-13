@@ -339,6 +339,18 @@ def _execution_context(progress: Callable[[str], None]):
     return execution_context(observer=observer, on_output=on_output)
 
 
+def _maintain_archive(store: Store, run_id: int, archive: Path) -> None:
+    try:
+        with _locked(archive):
+            marker = archive / "gitwarden-maintenance"
+            if marker.exists() and time.time() - marker.stat().st_mtime < 7 * 86400:
+                return
+            run(archive, "gc", "--no-prune")
+            marker.touch()
+    except Exception as exc:
+        logs.add_step(store, run_id, "maintenance", str(exc), level="warn")
+
+
 def run_task(store: Store, data_dir: Path, task_id: int) -> bool | None:
     """返回来源采集是否成功；锁忙返回 None，不计入失败退避。"""
     task = store.get_task(task_id)
@@ -374,6 +386,8 @@ def run_task(store: Store, data_dir: Path, task_id: int) -> bool | None:
     except Exception as exc:
         message = logs.redact_text(store, str(exc))
         log.error("任务 %s 失败: %s", task["name"], message)
+    if captured is not None:
+        _maintain_archive(store, run_id, archive)
     progress = _progress_text(store, progress_parts, archive, initial_backup)
     store.finish_run(run_id, status, message, progress=progress)
     store.finish_task(task_id, status)

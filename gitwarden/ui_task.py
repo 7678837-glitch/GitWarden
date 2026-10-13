@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from gitwarden.archive import ArchiveBusy
-from gitwarden.creds import check_url
+from gitwarden.creds import check_target_urls, check_url
 from gitwarden.git import GitError
 from gitwarden.git import run as git_run
 from gitwarden.i18n import t
@@ -189,8 +189,7 @@ def _validate_target(
         raise ValueError(t("error.required", field=t("wizard.mirror_url")))
     if not history_url:
         raise ValueError(t("error.required", field=t("wizard.history_url")))
-    check_url(main_url)
-    check_url(history_url)
+    check_target_urls(main_url, history_url)
     cred_id = _cred_id(str(targets.get("cred_id", "")))
     if cred_id is not None and store.get_cred(cred_id) is None:
         raise ValueError(t("error.credential_invalid"))

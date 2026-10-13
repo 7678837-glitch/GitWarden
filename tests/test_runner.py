@@ -242,3 +242,99 @@ def test_offline_source_still_flushes_preserved_backlog(env, monkeypatch, failur
     assert row["status"] == "failed" and cause in row["message"]
     assert env.store.get_task(env.task_id)["last_status"] == "failed"
     assert any(step["target_id"] == tid for step in list_steps(env.store, row["id"]))
+
+
+def test_maintenance_preserves_refs_and_objects_and_runs_at_most_weekly(env, monkeypatch):
+    import os
+
+    import gitwarden.runner as runner
+    from gitwarden.archive import ArchiveBusy, _locked, init_archive
+
+    archive = archive_path(env.data, env.store.get_task(env.task_id))
+    init_archive(archive)
+    capture(archive, str(env.src), "t")
+    run(env.src, "reset", "--hard", "HEAD~1")
+    capture(archive, str(env.src), "t")
+    before = run(archive, "for-each-ref").stdout
+    objects = run(archive, "for-each-ref", "--format=%(objectname)").stdout.splitlines()
+    loose = run(archive, "hash-object", "-w", "--stdin", input="unreferenced object").stdout.strip()
+    old = time.time() - 30 * 86400
+    os.utime(archive / "objects" / loose[:2] / loose[2:], (old, old))
+    gc_calls = []
+    real_run = runner.run
+
+    def observed_run(path, *args, **kwargs):
+        if args[:1] == ("gc",):
+            assert args == ("gc", "--no-prune")
+            with pytest.raises(ArchiveBusy):
+                with _locked(archive):
+                    pass
+            gc_calls.append(args)
+        return real_run(path, *args, **kwargs)
+
+    monkeypatch.setattr(runner, "run", observed_run)
+    env.run()
+    assert len(gc_calls) == 1
+    assert run(archive, "for-each-ref").stdout == before
+    for oid in [*objects, loose]:
+        assert run(archive, "cat-file", "-e", oid).returncode == 0
+    marker = archive / "gitwarden-maintenance"
+    first_mtime = marker.stat().st_mtime
+    env.run()
+    assert len(gc_calls) == 1 and marker.stat().st_mtime == first_mtime
+    expired = time.time() - 8 * 86400
+    os.utime(marker, (expired, expired))
+    env.run()
+    assert len(gc_calls) == 2 and marker.stat().st_mtime > expired
+
+
+def test_maintenance_failure_is_a_warning_and_does_not_fail_the_run(env, monkeypatch):
+    import gitwarden.runner as runner
+    from gitwarden.git import GitError
+
+    real_run = runner.run
+
+    def fail_gc(path, *args, **kwargs):
+        if args[:1] == ("gc",):
+            raise GitError(list(args), 1, "maintenance fixture failure")
+        return real_run(path, *args, **kwargs)
+
+    monkeypatch.setattr(runner, "run", fail_gc)
+    env.run()
+    latest = env.store.list_runs(env.task_id)[0]
+    assert latest["status"] == "ok"
+    assert any(
+        step["level"] == "warn" and "maintenance fixture failure" in (step["message"] or "")
+        for step in list_steps(env.store, latest["id"])
+    )
+    archive = archive_path(env.data, env.store.get_task(env.task_id))
+    assert not (archive / "gitwarden-maintenance").exists()
+
+
+@pytest.mark.parametrize("stalled", [False, True])
+def test_failed_run_keeps_final_git_error_after_large_progress(env, monkeypatch, stalled):
+    from gitwarden.git import execution_context
+
+    upload_pack = env.tmp / "failing-upload-pack"
+    upload_pack.write_text(
+        "#!/bin/sh\n"
+        "i=0; while [ $i -lt 4000 ]; do "
+        "printf 'Receiving objects progress %s\\n' \"$i\" >&2; i=$((i+1)); done\n"
+        + ("sleep 30\n" if stalled else "printf 'fatal: final transfer failure\\n' >&2; exit 7\n")
+    )
+    upload_pack.chmod(0o755)
+
+    def failing_capture(*args, **kwargs):
+        with execution_context(stall_minutes=0.03):
+            run(None, "ls-remote", f"--upload-pack={upload_pack}", f"file://{env.src}")
+
+    monkeypatch.setattr("gitwarden.runner.capture", failing_capture)
+    env.run()
+    latest = env.store.list_runs(env.task_id)[0]
+    expected = "Git stalled" if stalled else "fatal: final transfer failure"
+    assert latest["status"] == "failed"
+    assert expected in latest["message"]
+    capture_step = next(s for s in list_steps(env.store, latest["id"]) if s["step"] == "capture")
+    assert expected in capture_step["raw"]
+    assert capture_step["raw"].startswith("…[truncated ")
+    assert len(capture_step["raw"].encode()) <= 65536

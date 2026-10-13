@@ -38,7 +38,7 @@ class GitError(Exception):
     def __str__(self) -> str:
         return (
             f"git command failed: args={list(self.args)!r}, returncode={self.returncode}, "
-            f"stderr={self.stderr[:_STDERR_LIMIT]}"
+            f"stderr={self.stderr[-_STDERR_LIMIT:]}"
         )
 
 

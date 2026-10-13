@@ -611,3 +611,100 @@ def test_credential_edit_failure_hides_old_and_new_secrets(client):
     activity = store._rows("SELECT * FROM activity WHERE action='credential.update'")
     assert activity and "400" in activity[0]["detail"]
     assert "platform-secret" not in str(activity) and "new-secret" not in str(activity)
+
+
+@pytest.mark.parametrize("interval", [60, 1440])
+def test_task_interval_edit_recalculates_due_only_when_changed(client, interval):
+    from datetime import UTC, datetime, timedelta
+
+    login(client)
+    store, task_id, _ = _task_and_target(client)
+    last = datetime.now(UTC) - timedelta(hours=2)
+    old_due = last + timedelta(days=1)
+    store.update_task(task_id, interval_minutes=1440, next_run_at=old_due.isoformat())
+    store._exec("UPDATE tasks SET last_run_at=? WHERE id=?", (last.isoformat(), task_id))
+    task = store.get_task(task_id)
+    response = client.post(
+        f"/tasks/{task_id}/edit",
+        data={
+            "csrf": csrf_of(client),
+            "name": task["name"],
+            "source_url": task["source_url"],
+            "interval_minutes": interval,
+            "enabled": "on",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    updated = store.get_task(task_id)
+    assert updated["next_run_at"] == (None if interval == 60 else old_due.isoformat())
+    assert client.app.state.scheduler._task_due(updated, datetime.now(UTC)) == last + timedelta(
+        minutes=interval
+    )
+
+
+@pytest.mark.parametrize("operation", ["add", "edit_main", "edit_history"])
+def test_store_rejects_identical_target_urls_without_changing_binding(client, operation):
+    store, task_id, target_id = _task_and_target(client)
+    store.set_bound(target_id, True)
+    original = store.get_target(target_id)
+    with pytest.raises(ValueError, match="主镜像.*历史仓|Mirror.*history"):
+        if operation == "add":
+            store.add_target(
+                task_id, "same", original["main_url"], "  " + original["main_url"] + "/  "
+            )
+        elif operation == "edit_main":
+            store.update_target(target_id, main_url=original["history_url"] + "/")
+        else:
+            store.update_target(target_id, history_url=original["main_url"] + "/")
+    assert store.get_target(target_id) == original
+    assert len(store.list_targets(task_id)) == 1
+
+
+@pytest.mark.parametrize(
+    "lang,expected",
+    [
+        ("en", "Mirror and history repository URLs must be different"),
+        ("zh_CN", "主镜像与历史仓地址必须不同"),
+    ],
+)
+@pytest.mark.parametrize("entry", ["add", "edit", "wizard"])
+def test_target_url_validation_rejects_same_repository_in_all_forms(client, lang, expected, entry):
+    login(client)
+    client.cookies.set("gw_lang", lang)
+    store, task_id, target_id = _task_and_target(client)
+    original = store.get_target(target_id)
+    data = {
+        "csrf": csrf_of(client),
+        "name": "same",
+        "main_url": original["main_url"],
+        "history_url": "  " + original["main_url"] + "/  ",
+    }
+    if entry == "add":
+        path = f"/tasks/{task_id}/targets"
+    elif entry == "edit":
+        path = f"/targets/{target_id}/edit"
+    else:
+        path = "/tasks/new"
+        data.update(
+            step="targets",
+            mode="manual",
+            source_url="https://source.example/new.git",
+            interval_minutes="60",
+        )
+    response = client.post(path, data=data, follow_redirects=False)
+    assert response.status_code == 400
+    assert expected in response.text
+    assert store.get_target(target_id) == original
+    assert len(store.list_tasks()) == 1 and len(store.list_targets()) == 1
+
+
+@pytest.mark.parametrize("operation", ["add", "edit"])
+def test_identical_local_target_urls_ignore_surrounding_whitespace(client, operation):
+    store, task_id, _ = _task_and_target(client)
+    target = store.add_target(task_id, "local", "/tmp/mirror.git", "/tmp/history.git")
+    with pytest.raises(ValueError, match="主镜像与历史仓地址必须不同"):
+        if operation == "add":
+            store.add_target(task_id, "duplicate", "/tmp/mirror.git", " /tmp/mirror.git/ ")
+        else:
+            store.update_target(target, history_url=" /tmp/mirror.git/ ")

@@ -244,3 +244,28 @@ def test_failed_bundle_generation_keeps_chinese_error_and_cleans_directory(clien
     assert response.status_code == 500
     assert response.json()["detail"] == "生成恢复包失败，请查看服务日志。"
     assert not list((config.data_dir / "work").glob("bundle-*"))
+
+
+@pytest.mark.parametrize(
+    "lang,expected", [("en", "Interrupted by service restart"), ("zh_CN", "服务重启时中断")]
+)
+def test_startup_finishes_interrupted_runs_but_keeps_completed_runs(config, lang, expected):
+    from gitwarden.i18n import render
+
+    store = Store(config.data_dir)
+    task = store.add_task("interrupted", "/tmp/local-fixture.git", enabled=False)
+    completed = store.start_run(task)
+    store.finish_run(completed, "ok", "previous success")
+    completed_before = store.list_runs(task)[0]
+    interrupted = store.start_run(task, progress="Receiving objects: 40%")
+    for _ in range(2):
+        with TestClient(create_app(config, start_scheduler=False)) as client:
+            latest, previous = store.list_runs(task)
+            assert latest["id"] == interrupted and latest["status"] == "failed"
+            assert latest["finished_at"] is not None
+            assert render(latest["message"], lang) == expected
+            assert previous == completed_before
+            login(client)
+            client.cookies.set("gw_lang", lang)
+            assert expected in client.get("/logs").text
+            assert expected in client.get(f"/tasks/{task}").text
