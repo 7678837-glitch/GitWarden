@@ -142,17 +142,19 @@ def _preserve(archive: Path, source_id: str, events: list[Event]) -> None:
 
 
 def _commit_mirror(archive: Path, events: list[Event]) -> None:
-    """阶段 B：带期望旧值，单事务更新镜像引用。"""
+    """阶段 B：旧对象已保全，先删除再更新，允许 a 与 a/b 相互替换。"""
+    deletes = []
     commands = []
     for ev in events:
         if ev.kind == "create":
             commands.append(f"create {ev.ref} {ev.new}\n")
         elif ev.kind == "delete":
-            commands.append(f"delete {ev.ref} {ev.old}\n")
+            deletes.append(f"delete {ev.ref} {ev.old}\n")
         else:
             commands.append(f"update {ev.ref} {ev.new} {ev.old}\n")
-    if commands:
-        run(archive, "update-ref", "--stdin", input="start\n" + "".join(commands) + "commit\n")
+    for batch in (deletes, commands):
+        if batch:
+            run(archive, "update-ref", "--stdin", input="start\n" + "".join(batch) + "commit\n")
 
 
 def capture(

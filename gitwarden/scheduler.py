@@ -262,10 +262,11 @@ class Scheduler:
     def _execute(self, item: _WorkItem) -> None:
         started = time.monotonic()
         error: Exception | None = None
+        captured = False
         try:
             with execution_context(stall_minutes=self.stall_minutes):
                 if item.kind == "task":
-                    run_task(self.store, self.data_dir, item.object_id)
+                    captured = run_task(self.store, self.data_dir, item.object_id)
                 else:
                     discover(self.store, item.object_id)
         except Exception as exc:
@@ -279,28 +280,25 @@ class Scheduler:
                 logs.add_activity(self.store, "discovery.failed", name, str(exc), None)
         duration = max(0.0, time.monotonic() - started)
         if item.kind == "task":
-            self._finish_task(item.object_id, duration, error)
+            self._finish_task(item.object_id, duration, error, captured)
         else:
             self._finish_access(item.object_id, duration, error)
 
-    def _finish_task(self, task_id: int, duration: float, error: Exception | None) -> None:
+    def _finish_task(
+        self, task_id: int, duration: float, error: Exception | None, captured: bool | None
+    ) -> None:
         before = self.store.get_task(task_id)
         if before is None:
             return
         if error is not None and before.get("last_status") != "failed":
             self.store.finish_task(task_id, "failed")
         after = self.store.get_task(task_id) or before
-        success = error is None and after.get("last_status") == "ok"
-        if error is None and after.get("last_run_at") is None:
-            self.store.finish_task(task_id, "ok")
-            after = self.store.get_task(task_id) or after
-            success = True
         durations = list(before.get("recent_durations") or [])
         failures = int(before.get("consecutive_failures") or 0)
-        if success:
+        if error is None and captured:
             durations = (durations + [duration])[-3:]
             failures = 0
-        else:
+        elif error is not None or captured is False:
             failures += 1
         finished = datetime.now(UTC)
         interval = effective_interval(

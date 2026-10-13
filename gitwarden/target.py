@@ -129,16 +129,27 @@ def _push_history(
 
 
 def _gate_allows(
-    archive: Path, ref: str, remote: str, want: str, confirmed_objects: set[str]
+    archive: Path,
+    ref: str,
+    remote: str,
+    want: str,
+    confirmed_objects: set[str],
+    history_prefix: str,
+    confirmed: set[str],
 ) -> bool:
-    if ref.startswith("refs/heads/") and want:
-        types = [
-            run(archive, "cat-file", "-t", o, check=False).stdout.strip() for o in (remote, want)
-        ]
-        if types == ["commit", "commit"]:
+    if ref.startswith("refs/heads/") and (
+        run(archive, "cat-file", "-t", remote, check=False).stdout.strip() == "commit"
+    ):
+        if want:
             ff = run(archive, "merge-base", "--is-ancestor", remote, want, check=False)
             if ff.returncode == 0:
                 return True
+        # 只认可本轮核对过的历史，旧的推送记录不能替代远端确认。
+        containing = run(
+            archive, "for-each-ref", "--contains", remote, "--format=%(refname)", history_prefix
+        ).stdout.splitlines()
+        if any(name.removeprefix(history_prefix) in confirmed for name in containing):
+            return True
     return remote in confirmed_objects
 
 
@@ -185,7 +196,7 @@ def push_target(archive: Path, target: Target, *, env: dict[str, str] | None = N
                 ).stdout.strip()
                 for u in confirmed
             }
-        _reconcile_main(archive, target, confirmed_objects, result, env)
+        _reconcile_main(archive, target, confirmed_objects, confirmed, result, env)
         return result
 
 
@@ -193,6 +204,7 @@ def _reconcile_main(
     archive: Path,
     target: Target,
     confirmed_objects: set[str],
+    confirmed: set[str],
     result: PushResult,
     env: dict[str, str] | None,
 ) -> None:
@@ -214,7 +226,9 @@ def _reconcile_main(
                 continue
             if r != e:
                 result.main_conflicts.append(ref)
-            elif r and not _gate_allows(archive, ref, r, w, confirmed_objects):
+            elif r and not _gate_allows(
+                archive, ref, r, w, confirmed_objects, _history_prefix(target), confirmed
+            ):
                 result.gate_blocked.append(ref)
             else:
                 to_push.append((ref, e))
@@ -226,13 +240,13 @@ def _reconcile_main(
 
         updates = [(ref, e) for ref, e in to_push if ref in want]
         deletes = [(ref, e) for ref, e in to_push if ref not in want]
-        if updates:
-            args = [f"--force-with-lease={ref}:{e}" for ref, e in updates]
-            args += [f"{ref}:{ref}" for ref, _ in updates]
-            run(archive, "push", target.main_url, *args, check=False, env=env)
         if deletes:
             args = [f"--force-with-lease={ref}:{e}" for ref, e in deletes]
             args += [f":{ref}" for ref, _ in deletes]
+            run(archive, "push", target.main_url, *args, check=False, env=env)
+        if updates:
+            args = [f"--force-with-lease={ref}:{e}" for ref, e in updates]
+            args += [f"{ref}:{ref}" for ref, _ in updates]
             run(archive, "push", target.main_url, *args, check=False, env=env)
 
         remote = {
@@ -257,6 +271,7 @@ def _sync_records(
     records: dict[str, str],
 ) -> None:
     """remote == want 的 ref：记录同步为 want（want 为空则删除）。"""
+    deletes = []
     commands = []
     for ref in set(want) | set(remote) | set(records):
         w, r = want.get(ref, ""), remote.get(ref, "")
@@ -266,7 +281,8 @@ def _sync_records(
         if w and records.get(ref) != w:
             commands.append(f"update {name} {w}\n")
         elif not w and ref in records:
-            commands.append(f"delete {name}\n")
+            deletes.append(f"delete {name}\n")
+    _update_refs(archive, deletes)
     _update_refs(archive, commands)
     for ref in set(want) | set(remote):
         if remote.get(ref, "") == want.get(ref, ""):

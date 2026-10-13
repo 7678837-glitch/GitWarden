@@ -215,3 +215,48 @@ def test_busy_archive_raises_archive_busy(env) -> None:
         fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(ArchiveBusy):
             cap(ar, src)
+
+
+@pytest.mark.parametrize("namespace", ["heads", "tags"])
+@pytest.mark.parametrize("old_name,new_name", [("a", "a/b"), ("a/b", "a")])
+def test_capture_handles_ref_namespace_replacement(env, namespace, old_name, new_name):
+    src, ar = env
+    old = commit(src, "old")
+    old_ref, new_ref = f"refs/{namespace}/{old_name}", f"refs/{namespace}/{new_name}"
+    run(src, "update-ref", old_ref, old)
+    cap(ar, src)
+    new = commit(src, "new")
+    run(src, "update-ref", "-d", old_ref)
+    run(src, "update-ref", new_ref, new)
+
+    cap(ar, src)
+
+    assert ref(ar, old_ref) is None
+    assert ref(ar, new_ref) == new
+    assert any(obj == old and f"ref: {old_ref}\n" in text for _, obj, text in preserved(ar))
+
+
+def test_ref_namespace_replacement_recovers_after_delete_transaction(env, monkeypatch):
+    src, ar = env
+    old = commit(src, "old")
+    run(src, "branch", "a")
+    cap(ar, src)
+    run(src, "branch", "-D", "a")
+    run(src, "branch", "a/b")
+    real_run = arch.run
+
+    def crash_after_delete(*args, **kwargs):
+        result = real_run(*args, **kwargs)
+        if "delete refs/heads/a " in kwargs.get("input", ""):
+            raise RuntimeError("crash after mirror deletion")
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(arch, "run", crash_after_delete)
+        with pytest.raises(RuntimeError, match="crash after mirror deletion"):
+            cap(ar, src)
+    assert ref(ar, "refs/heads/a") is None
+    assert len(preserved(ar)) == 1
+    cap(ar, src)
+    assert ref(ar, "refs/heads/a/b") == old
+    assert len(preserved(ar)) == 1

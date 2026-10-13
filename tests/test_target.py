@@ -302,3 +302,60 @@ def test_audit_reports_missing_modified_unknown(env: Env) -> None:
     head = rev_parse(env.hist, "refs/tags/gw/binding")
     run(env.hist, "update-ref", "refs/tags/gw/ZZZ", head)
     assert audit(env.ar, env.t).unknown == ["ZZZ"]
+
+
+@pytest.mark.parametrize("namespace", ["heads", "tags"])
+@pytest.mark.parametrize("old_name,new_name", [("a", "a/b"), ("a/b", "a")])
+def test_target_handles_ref_namespace_replacement_in_one_run(env, namespace, old_name, new_name):
+    old = commit(env.src, "old")
+    old_ref, new_ref = f"refs/{namespace}/{old_name}", f"refs/{namespace}/{new_name}"
+    run(env.src, "update-ref", old_ref, old)
+    bound(env)
+    assert env.push().main_ok
+    new = commit(env.src, "new")
+    run(env.src, "update-ref", "-d", old_ref)
+    run(env.src, "update-ref", new_ref, new)
+    env.cap()
+
+    result = env.push()
+
+    assert result.main_ok and not result.main_conflicts
+    assert old_ref not in refs(env.main)
+    assert refs(env.main)[new_ref] == new
+    records = refs(env.ar, "refs/pushed/t1/main/")
+    assert f"refs/pushed/t1/main/{namespace}/{old_name}" not in records
+    assert records[f"refs/pushed/t1/main/{namespace}/{new_name}"] == new
+    assert env.push().main_ok
+
+
+@pytest.mark.parametrize("change", ["force", "delete"])
+@pytest.mark.parametrize("confirm_history", [True, False])
+def test_target_catches_up_after_skipped_fast_forward(env, monkeypatch, change, confirm_history):
+    first = commit(env.src, "first")
+    bound(env)
+    assert env.push().main_ok
+    preserved_tip = commit(env.src, "unpublished fast forward")
+    env.cap()
+    if change == "force":
+        run(env.src, "checkout", "--orphan", "replacement")
+        replacement = commit(env.src, "unrelated")
+        run(env.src, "update-ref", "refs/heads/main", replacement)
+        run(env.src, "checkout", "main")
+        run(env.src, "branch", "-D", "replacement")
+    else:
+        run(env.src, "update-ref", "-d", "refs/heads/main")
+    env.cap()
+    [pref] = preserved(env.ar)
+    assert run(env.ar, "rev-parse", f"{pref}^{{}}").stdout.strip() == preserved_tip
+    if not confirm_history:
+        monkeypatch.setattr(tgt, "_push_history", lambda *args, **kwargs: None)
+
+    result = env.push()
+
+    if confirm_history:
+        assert result.main_ok and not result.gate_blocked
+        assert refs(env.main, "refs/heads") == refs(env.ar, "refs/heads")
+    else:
+        assert not result.main_ok
+        assert result.gate_blocked == ["refs/heads/main"]
+        assert refs(env.main)["refs/heads/main"] == first

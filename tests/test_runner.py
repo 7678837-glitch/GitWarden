@@ -208,3 +208,37 @@ def test_initial_backup_progress_is_visible_before_capture_finishes(env, monkeyp
     monkeypatch.setattr(runner, "capture", capture_and_read)
     env.run()
     assert progress and progress[0]
+
+
+@pytest.mark.parametrize("failure", ["git", "other"])
+def test_offline_source_still_flushes_preserved_backlog(env, monkeypatch, failure):
+    tid, main, hist = env.add_target("a")
+    env.run()
+    away = hist.with_name("offline-history.git")
+    hist.rename(away)
+    run(env.src, "reset", "--hard", "HEAD~1")
+    new = commit(env.src, "rewritten while target offline")
+    env.run()
+    event = env.store.list_events(env.task_id)[0]
+    away.rename(hist)
+    if failure == "git":
+        env.store.update_task(env.task_id, source_url=str(env.tmp / "unreachable.git"))
+        cause = "unreachable.git"
+    else:
+
+        def fail_capture(*args, **kwargs):
+            raise RuntimeError("source capture failed")
+
+        monkeypatch.setattr("gitwarden.runner.capture", fail_capture)
+        cause = "source capture failed"
+
+    env.run()
+
+    tag = event["preserved_ref"].replace("refs/preserved/", "refs/tags/gw/")
+    assert rev_parse(hist, tag) is not None
+    assert rev_parse(main, "refs/heads/main") == new
+    assert env.store.get_target(tid)["last_status"] == "ok"
+    row = env.store.list_runs(env.task_id)[0]
+    assert row["status"] == "failed" and cause in row["message"]
+    assert env.store.get_task(env.task_id)["last_status"] == "failed"
+    assert any(step["target_id"] == tid for step in list_steps(env.store, row["id"]))

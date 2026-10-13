@@ -311,3 +311,63 @@ def test_stop_returns_after_join_limit_when_worker_is_stuck(
         assert any("worker" in record.getMessage() for record in caplog.records)
     finally:
         release.set()
+
+
+@pytest.mark.parametrize("has_good_target", [False, True])
+def test_target_failures_do_not_back_off_source_capture(tmp_path, has_good_target):
+    from gitwarden.scheduler import _WorkItem
+    from tests.test_runner import Env
+
+    env = Env(tmp_path)
+    _, _, bad_hist = env.add_target("bad")
+    if has_good_target:
+        env.add_target("good")
+    bad_hist.rename(tmp_path / "offline-history.git")
+    env.store.update_task(env.task_id, interval_minutes=5, consecutive_failures=2)
+    scheduler = Scheduler(env.store, env.data)
+    for _ in range(2):
+        scheduler._execute(_WorkItem("task", env.task_id, datetime.now(UTC)))
+        task = env.store.get_task(env.task_id)
+        assert task["consecutive_failures"] == 0
+        assert task["recent_durations"]
+        assert task["last_status"] == ("partial" if has_good_target else "failed")
+        delay = datetime.fromisoformat(task["next_run_at"]) - datetime.fromisoformat(
+            task["last_run_at"]
+        )
+        assert abs(delay.total_seconds() - 300) <= 1
+
+
+@pytest.mark.parametrize("failures", [0, 2])
+def test_busy_run_keeps_source_failure_count(tmp_path, failures):
+    from gitwarden.archive import _locked, init_archive
+    from gitwarden.runner import archive_path
+    from gitwarden.scheduler import _WorkItem
+    from tests.test_runner import Env
+
+    env = Env(tmp_path)
+    env.store.update_task(env.task_id, consecutive_failures=failures, recent_durations=[10])
+    archive = archive_path(env.data, env.store.get_task(env.task_id))
+    init_archive(archive)
+    scheduler = Scheduler(env.store, env.data)
+    with _locked(archive):
+        scheduler._execute(_WorkItem("task", env.task_id, datetime.now(UTC)))
+    task = env.store.get_task(env.task_id)
+    assert task["last_status"] == "busy"
+    assert task["consecutive_failures"] == failures
+    assert task["recent_durations"] == [10]
+
+
+def test_source_failure_backoff_recovers_after_success(tmp_path):
+    from gitwarden.scheduler import _WorkItem
+    from tests.test_runner import Env
+
+    env = Env(tmp_path)
+    env.store.update_task(env.task_id, source_url=str(tmp_path / "unreachable.git"))
+    scheduler = Scheduler(env.store, env.data)
+    item = _WorkItem("task", env.task_id, datetime.now(UTC))
+    for failures in (1, 2):
+        scheduler._execute(item)
+        assert env.store.get_task(env.task_id)["consecutive_failures"] == failures
+    env.store.update_task(env.task_id, source_url=str(env.src))
+    scheduler._execute(item)
+    assert env.store.get_task(env.task_id)["consecutive_failures"] == 0

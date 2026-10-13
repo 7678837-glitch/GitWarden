@@ -228,6 +228,8 @@ def _execute(
     init_archive(archive)
     access = store.get_access(task["access_id"]) if task["access_id"] else None
     source_cred = access["cred_id"] if access else task["source_cred_id"]
+    capture_error = None
+    result = None
     try:
         with git_env(_cred(store, source_cred), data_dir / "work") as env:
             result = _observed(
@@ -238,12 +240,15 @@ def _execute(
                 target_id=None,
                 detailed=detailed,
             )
-    except GitError as exc:
+    except ArchiveBusy:
+        raise
+    except Exception as exc:
+        capture_error = exc
         summary = access["last_discovery_summary"] if access else None
         missing = re.search(
             r"returned error: 404|repository .+ not found|repository not found|"
             r"repository .+ does not exist|does not appear to be a git repository",
-            exc.stderr,
+            exc.stderr if isinstance(exc, GitError) else "",
             re.IGNORECASE,
         )
         if (
@@ -253,8 +258,7 @@ def _execute(
             and task["platform_repo_id"] not in summary.get("seen_repo_ids", [])
         ):
             store.update_task(task["id"], managed_state="source_gone")
-        raise
-    for event in result.events:
+    for event in result.events if result is not None else []:
         logs.add_ref(store, run_id, event.ref, event.kind, event.old, event.new)
         if event.kind not in _QUIET_KINDS:
             store.add_event(
@@ -315,6 +319,8 @@ def _execute(
                 target_id=row["id"],
             )
 
+    if capture_error is not None:
+        raise capture_error
     if failures and successes:
         return "partial"
     if failures:
@@ -333,7 +339,8 @@ def _execution_context(progress: Callable[[str], None]):
     return execution_context(observer=observer, on_output=on_output)
 
 
-def run_task(store: Store, data_dir: Path, task_id: int) -> None:
+def run_task(store: Store, data_dir: Path, task_id: int) -> bool | None:
+    """返回来源采集是否成功；锁忙返回 None，不计入失败退避。"""
     task = store.get_task(task_id)
     archive = archive_path(data_dir, task)
     init_archive(archive)
@@ -343,6 +350,7 @@ def run_task(store: Store, data_dir: Path, task_id: int) -> None:
     progress_parts: list[str] = []
     message = None
     status = "failed"
+    captured = False
     last_progress = 0.0
 
     def progress(text: str) -> None:
@@ -358,7 +366,9 @@ def run_task(store: Store, data_dir: Path, task_id: int) -> None:
     try:
         with _execution_context(progress):
             status = _execute(store, data_dir, task, run_id, detailed=detailed)
+            captured = True
     except ArchiveBusy:
+        captured = None
         status, message = "busy", msg("run.archive_busy")
         logs.add_step(store, run_id, "capture", message, level="warn")
     except Exception as exc:
@@ -367,6 +377,7 @@ def run_task(store: Store, data_dir: Path, task_id: int) -> None:
     progress = _progress_text(store, progress_parts, archive, initial_backup)
     store.finish_run(run_id, status, message, progress=progress)
     store.finish_task(task_id, status)
+    return captured
 
 
 def retry_target(store: Store, data_dir: Path, target_id: int) -> str:
