@@ -224,12 +224,18 @@ def _apply_actions(
                 (*values.values(), fields["id"]),
             )
             continue
+        base_name = f"{instance['name']}/{fields['full_name']}"
+        name = base_name
+        suffix = 1
+        while conn.execute("SELECT 1 FROM tasks WHERE name=?", (name,)).fetchone():
+            name = f"{base_name}#{fields['repo_id']}" + (f"-{suffix}" if suffix > 1 else "")
+            suffix += 1
         conn.execute(
             "INSERT INTO tasks(name,source_url,source_cred_id,interval_minutes,enabled,"
             "archive_uuid,instance_id,access_id,platform_repo_id,managed_state,detailed_logging,"
             "recent_durations) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                f"{instance['name']}/{fields['full_name']}",
+                name,
                 fields["clone_url"],
                 access["cred_id"],
                 access["default_sync_interval_minutes"],

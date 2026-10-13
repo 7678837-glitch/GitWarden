@@ -10,7 +10,7 @@ import re
 from collections import Counter
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from gitwarden.web import CsrfToken
 
@@ -328,6 +328,7 @@ def creds_page(
     *,
     error: str | None = None,
     values: dict[str, Any] | None = None,
+    edit_id: int | None = None,
 ):
     """Render credentials without placing any secret column in the context."""
 
@@ -336,12 +337,21 @@ def creds_page(
         "name": request.query_params.get("name", ""),
         "kind": query_kind if query_kind in {"https", "ssh"} else "https",
         "username": request.query_params.get("username", ""),
+        "known_hosts": "",
     }
+    edit_id = edit_id or _selected_id(request, "edit")
+    if edit_id is not None:
+        credential = _store(request)._one(
+            "SELECT name, kind, username, known_hosts FROM creds WHERE id=?", (edit_id,)
+        )
+        if credential is None:
+            raise HTTPException(404, _web().t("error.credential_invalid"))
+        form_values.update({key: value or "" for key, value in credential.items()})
     if values:
         form_values.update(
             {
                 key: str(values[key])
-                for key in ("name", "kind", "username")
+                for key in ("name", "username", "known_hosts", *(() if edit_id else ("kind",)))
                 if key in values and values[key] is not None
             }
         )
@@ -354,6 +364,7 @@ def creds_page(
         error=error,
         credentials=_credential_rows(_store(request)),
         values=form_values,
+        edit_id=edit_id,
     )
 
 

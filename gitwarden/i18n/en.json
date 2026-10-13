@@ -293,7 +293,7 @@
   "platforms.reason.excluded": "Excluded by the current rule",
   "platforms.reason.pattern": "Matches exclude pattern {pattern}",
   "platforms.reason.unknown": "Filtered by the current scope or rules: {pattern}",
-  "creds.intro": "Secrets are never shown again after saving. To rotate one, create a new credential and switch references to it.",
+  "creds.intro": "Secrets are never shown again after saving. Edit a credential to rotate it for every task, target, and platform access that uses it.",
   "creds.saved": "Saved credentials",
   "creds.name": "Name",
   "creds.type": "Type",
@@ -559,5 +559,10 @@
   "task.edit_target": "Edit",
   "task.edit_target_hint": "Changing a repository URL unbinds the target; bind the new empty repositories before the next push. Credential changes keep the existing binding.",
   "task.delete_target_hint": "This removes the target from GitWarden only. The remote repositories and the local archive stay untouched.",
-  "task.delete_target_confirm": "Confirm delete"
+  "task.delete_target_confirm": "Confirm delete",
+  "creds.edit": "Edit credential",
+  "creds.edit_named": "Edit {name}",
+  "creds.edit_hint": "Leave the password/token or private key blank to keep its current value. Changes apply to all references on their next run. The credential type cannot be changed.",
+  "error.credential_type_immutable": "The credential type cannot be changed.",
+  "logs.activity.credential_update": "Credential updated"
 }

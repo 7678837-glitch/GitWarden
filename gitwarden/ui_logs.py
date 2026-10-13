@@ -41,6 +41,7 @@ _ACTIVITY_KEYS = {
     "target.update": "logs.activity.target_update",
     "target.delete": "logs.activity.target_delete",
     "credential.create": "logs.activity.credential_create",
+    "credential.update": "logs.activity.credential_update",
     "credential.delete": "logs.activity.credential_delete",
     "access.create": "logs.activity.access_create",
     "access.save": "logs.activity.access_save",

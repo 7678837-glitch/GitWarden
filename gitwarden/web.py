@@ -482,7 +482,7 @@ def _activity_name(path: str) -> str:
     if path == "/creds":
         return "credential.create"
     if path.startswith("/creds/"):
-        return "credential.delete"
+        return "credential.update" if path.endswith("/edit") else "credential.delete"
     return "post"
 
 
@@ -614,10 +614,11 @@ def _creds_page(
     *,
     error: str | None = None,
     values: dict | None = None,
+    edit_id: int | None = None,
 ):
     from gitwarden.ui_platforms import creds_page
 
-    return creds_page(request, csrf, status, error=error, values=values)
+    return creds_page(request, csrf, status, error=error, values=values, edit_id=edit_id)
 
 
 def _platform_page(
@@ -1259,6 +1260,51 @@ def create_app(config: Config, start_scheduler: bool = True) -> FastAPI:
             )
         except (ValueError, sqlite3.IntegrityError) as exc:
             return _creds_page(request, csrf, 400, error=_db_error(exc), values=values)
+        return _redirect("/creds")
+
+    @app.post("/creds/{cred_id}/edit")
+    def cred_edit(
+        request: Request,
+        cred_id: int,
+        csrf: VerifiedToken,
+        name: Annotated[str, Form()] = "",
+        kind: Annotated[str | None, Form()] = None,
+        username: Annotated[str, Form()] = "",
+        secret: Annotated[str, Form()] = "",
+        private_key: Annotated[str, Form()] = "",
+        known_hosts: Annotated[str | None, Form()] = None,
+    ):
+        store = _store(request)
+        credential = store.get_cred(cred_id)
+        if credential is None:
+            raise HTTPException(404, t("error.credential_invalid"))
+        private_key = private_key.replace("\r\n", "\n")
+        # 更新后数据库只返回新秘密，错误页仍需同时遮盖旧值和本次提交值。
+        secrets_ = [*store.secret_values(), secret, private_key]
+        try:
+            if kind is not None and kind != credential["kind"]:
+                raise ValueError(t("error.credential_type_immutable"))
+            fields = {"name": _text(name, "凭据名称"), "username": username.strip() or None}
+            if credential["kind"] == "https" and secret:
+                fields["secret"] = secret
+            if credential["kind"] == "ssh":
+                if private_key.strip():
+                    fields["private_key"] = private_key
+                if known_hosts is not None:
+                    fields["known_hosts"] = known_hosts.replace("\r\n", "\n")
+            store.update_cred(cred_id, **fields)
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            values = {"name": name, "username": username}
+            if known_hosts is not None:
+                values["known_hosts"] = known_hosts
+            return _creds_page(
+                request,
+                csrf,
+                400,
+                error=_redact(_db_error(exc), secrets_),
+                values={key: _redact(value, secrets_) for key, value in values.items()},
+                edit_id=cred_id,
+            )
         return _redirect("/creds")
 
     @app.post("/creds/{cred_id}/delete")

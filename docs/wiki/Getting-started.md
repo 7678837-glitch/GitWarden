@@ -21,6 +21,8 @@ Open **Credentials** in the sidebar.
 - Choose **SSH** for a private key and paste the exact host key line(s) required by `known_hosts`. Host-key verification is strict, so an unknown or changed host key stops the run.
 - Leave the credential unselected only when the endpoint is intentionally anonymous.
 
+Use **Edit credential** to rotate a token or SSH key in place. Leave the password/token or private key blank to keep its current value; the type stays fixed. All referring tasks, targets, and platform accesses use the new value on their next run, and target bindings are retained.
+
 Credentials cannot be deleted while a task, target, or platform access references them. The UI never places private keys or token values in its display context.
 
 ![Saved credentials](../images/credentials.jpg)

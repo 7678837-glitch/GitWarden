@@ -337,3 +337,50 @@ def test_rule_excluded_task_is_reenabled_when_rule_no_longer_matches(tmp_path, m
     task = store.get_task(task_id)
     assert task["enabled"] == 1
     assert task["managed_state"] == "active"
+
+
+def test_discovery_handles_name_reuse_after_repository_rename(tmp_path, monkeypatch):
+    store, _, access, _ = _access_store(tmp_path)
+    repos = [_repo(1, "org/foo")]
+    monkeypatch.setattr(
+        discovery_module,
+        "client_from_store",
+        lambda *_: SimpleNamespace(list_all_repos=lambda: repos),
+    )
+    discover(store, access)
+    old_id = store.list_tasks()[0]["id"]
+    repos[:] = [_repo(1, "org/bar")]
+    discover(store, access)
+    renamed = store.get_task(old_id)
+    repos.append(_repo(2, "org/foo"))
+
+    assert discover(store, access).created == ["org/foo"]
+
+    assert store.get_task(old_id) == renamed
+    new = next(task for task in store.list_tasks() if task["platform_repo_id"] == 2)
+    assert new["name"] == "local/org/foo#2"
+    assert discover(store, access).created == []
+    assert store.get_task(new["id"])["name"] == new["name"]
+
+
+@pytest.mark.parametrize("suffix_taken", [False, True])
+def test_discovery_avoids_manual_task_name_collision(tmp_path, monkeypatch, suffix_taken):
+    store, _, access, _ = _access_store(tmp_path)
+    manual = store.add_task("local/org/foo", "https://example.test/manual.git")
+    if suffix_taken:
+        store.add_task("local/org/foo#2", "https://example.test/another.git")
+    original = store.get_task(manual)
+    monkeypatch.setattr(
+        discovery_module,
+        "client_from_store",
+        lambda *_: SimpleNamespace(list_all_repos=lambda: [_repo(2, "org/foo")]),
+    )
+
+    assert discover(store, access).created == ["org/foo"]
+
+    assert store.get_task(manual) == original
+    new = next(task for task in store.list_tasks() if task["platform_repo_id"] == 2)
+    assert new["name"] == ("local/org/foo#2-2" if suffix_taken else "local/org/foo#2")
+    before = store.list_tasks()
+    discover(store, access)
+    assert store.list_tasks() == before

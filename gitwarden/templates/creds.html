@@ -35,8 +35,11 @@
           {% else %}<span class="muted">{{ t('creds.unused') }}</span>{% endif %}
         </td>
         <td>
+          <div class="actions">
+          <a class="btn secondary small" href="/creds?edit={{ credential.id }}#credential-form" aria-label="{{ t('creds.edit_named', name=credential.name) }}">{{ t('creds.edit') }}</a>
           {% if references %}<button type="button" class="secondary cred-delete" disabled title="{{ t('creds.delete_in_use_title') }}">{{ t('creds.delete') }}</button>
           {% else %}<form method="post" action="/creds/{{ credential.id }}/delete" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger cred-delete">{{ t('creds.delete') }}</button></form>{% endif %}
+          </div>
         </td>
       </tr>
       {% else %}<tr><td colspan="6" class="empty">{{ t('creds.empty') }}</td></tr>{% endfor %}
@@ -45,27 +48,32 @@
   </div>
 </section>
 
-<section aria-labelledby="add-heading" class="card padded cred-form">
+<section id="credential-form" aria-labelledby="add-heading" class="card padded cred-form">
   <div class="cred-add">
-    <h2 id="add-heading" style="margin:0">{{ t('creds.new_credential') }}</h2>
+    <h2 id="add-heading" style="margin:0">{{ t('creds.edit') if edit_id else t('creds.new_credential') }}</h2>
+    {% if edit_id %}
+    <p class="hint">{{ t('creds.edit_hint') }}</p>
+    <p>{{ t('creds.type') }}: <strong>{{ t('creds.kind.' ~ values.kind) }}</strong></p>
+    {% else %}
     <form method="get" action="/creds" class="kind-switch" aria-label="{{ t('creds.kind_switch') }}">
       <input type="hidden" name="name" value="{{ values.name }}">
       <input type="hidden" name="username" value="{{ values.username }}">
       <button type="submit" name="kind" value="https" class="{% if values.kind == 'https' %}active{% endif %}" aria-pressed="{{ 'true' if values.kind == 'https' else 'false' }}">{{ t('creds.kind.https_form') }}</button>
       <button type="submit" name="kind" value="ssh" class="{% if values.kind == 'ssh' %}active{% endif %}" aria-pressed="{{ 'true' if values.kind == 'ssh' else 'false' }}">{{ t('creds.kind.ssh_form') }}</button>
     </form>
-    <form method="post" action="/creds" class="form">
+    {% endif %}
+    <form method="post" action="{{ '/creds/' ~ edit_id ~ '/edit' if edit_id else '/creds' }}" class="form">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="hidden" name="kind" value="{{ values.kind }}">
       <label class="field">{{ t('creds.name') }}<input name="name" required value="{{ values.name }}" placeholder="{{ t('creds.name_placeholder') }}"></label>
+      <label class="field">{{ t('creds.username') }}<input name="username" value="{{ values.username }}" autocomplete="off"><span class="hint">{{ t('creds.username_hint') }}</span></label>
       {% if values.kind == 'ssh' %}
       <label class="field">{{ t('creds.private_key') }}<textarea name="private_key" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea><span class="hint">{{ t('creds.private_key_hint') }}</span></label>
-      <label class="field">{{ t('creds.known_hosts') }}<textarea name="known_hosts" spellcheck="false" placeholder="git.example.lan ssh-ed25519 AAAA…"></textarea><span class="hint">{{ t('creds.known_hosts_hint') }}</span></label>
+      <label class="field">{{ t('creds.known_hosts') }}<textarea name="known_hosts" spellcheck="false" placeholder="git.example.lan ssh-ed25519 AAAA…">{{ values.known_hosts }}</textarea><span class="hint">{{ t('creds.known_hosts_hint') }}</span></label>
       {% else %}
-      <label class="field">{{ t('creds.username') }}<input name="username" value="{{ values.username }}" autocomplete="off"><span class="hint">{{ t('creds.username_hint') }}</span></label>
       <label class="field">{{ t('creds.secret_input') }}<input name="secret" type="password" autocomplete="new-password"><span class="hint">{{ t('creds.secret_hint') }}</span></label>
       {% endif %}
-      <div><button type="submit">{{ t('creds.save') }}</button></div>
+      <div class="actions"><button type="submit">{{ t('creds.save') }}</button>{% if edit_id %}<a class="btn secondary" href="/creds">{{ t('common.action.cancel') }}</a>{% endif %}</div>
     </form>
   </div>
 </section>

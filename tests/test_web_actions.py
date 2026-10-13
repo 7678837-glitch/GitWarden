@@ -498,3 +498,116 @@ def test_deleting_a_target_removes_its_push_records(client, tmp_path):
     assert response.status_code == 303
     assert git(archive, "for-each-ref", f"refs/pushed/{target_id}/").stdout == ""
     assert git(archive, "for-each-ref", "refs/heads/").stdout != ""
+
+
+@pytest.mark.parametrize("replacement", ["rotated-token", ""])
+def test_credential_edit_rotates_shared_token_without_rebinding(client, replacement):
+    login(client)
+    store, access_id = _access(client)
+    cred_id = store.get_access(access_id)["cred_id"]
+    task = store.add_task("shared", "https://example.test/source.git", source_cred_id=cred_id)
+    target = store.add_target(
+        task, "backup", "https://example.test/main.git", "https://example.test/history.git", cred_id
+    )
+    store.set_bound(target, True)
+    response = client.post(
+        f"/creds/{cred_id}/edit",
+        data={
+            "csrf": csrf_of(client),
+            "name": "rotated",
+            "username": "new-user",
+            "secret": replacement,
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    cred = store.get_cred(cred_id)
+    assert cred["name"] == "rotated" and cred["username"] == "new-user"
+    assert cred["secret"] == (replacement or "platform-secret")
+    assert store.get_task(task)["source_cred_id"] == cred_id
+    assert store.get_target(target)["cred_id"] == cred_id
+    assert store.get_target(target)["bound"] == 1
+    assert store.get_access(access_id)["cred_id"] == cred_id
+    page = client.get(f"/creds?edit={cred_id}").text
+    assert f'action="/creds/{cred_id}/edit"' in page
+    assert "platform-secret" not in page and "rotated-token" not in page
+    activity = store._rows("SELECT * FROM activity WHERE action='credential.update'")
+    assert len(activity) == 1
+    assert not any(secret in str(activity) for secret in ("platform-secret", "rotated-token"))
+
+
+@pytest.mark.parametrize("replacement", ["ROTATED-PRIVATE-KEY", ""])
+def test_credential_edit_updates_ssh_fields_without_exposing_key(client, replacement):
+    login(client)
+    store = client.app.state.store
+    cred_id = store.add_cred(
+        "ssh",
+        "ssh",
+        username="git",
+        private_key="ORIGINAL-PRIVATE-KEY",
+        known_hosts="old-host ssh-ed25519 AAAA",
+    )
+    response = client.post(
+        f"/creds/{cred_id}/edit",
+        data={
+            "csrf": csrf_of(client),
+            "name": "ssh rotated",
+            "username": "git-new",
+            "private_key": replacement,
+            "known_hosts": "new-host ssh-ed25519 BBBB\r\n",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    cred = store.get_cred(cred_id)
+    assert cred["private_key"] == (replacement or "ORIGINAL-PRIVATE-KEY")
+    assert cred["known_hosts"] == "new-host ssh-ed25519 BBBB\n"
+    assert cred["username"] == "git-new"
+    page = client.get(f"/creds?edit={cred_id}").text
+    assert "ORIGINAL-PRIVATE-KEY" not in page and "ROTATED-PRIVATE-KEY" not in page
+    assert "new-host ssh-ed25519 BBBB" in page
+
+
+def test_credential_edit_enforces_authentication_csrf_and_immutable_type(client):
+    store, access_id = _access(client)
+    cred_id = store.get_access(access_id)["cred_id"]
+    original = store.get_cred(cred_id)
+    route = f"/creds/{cred_id}/edit"
+    assert client.post(route, data={"name": "changed"}).status_code == 401
+    login(client)
+    assert client.post(route, data={"name": "changed"}).status_code == 403
+    response = client.post(
+        route,
+        data={
+            "csrf": csrf_of(client),
+            "name": "changed",
+            "kind": "ssh",
+            "private_key": "must-not-leak",
+        },
+    )
+    assert response.status_code == 400
+    assert "must-not-leak" not in response.text and "platform-secret" not in response.text
+    assert store.get_cred(cred_id) == original
+
+
+def test_credential_edit_failure_hides_old_and_new_secrets(client):
+    login(client)
+    store, access_id = _access(client)
+    cred_id = store.get_access(access_id)["cred_id"]
+    original = store.get_cred(cred_id)
+    response = client.post(
+        f"/creds/{cred_id}/edit",
+        data={
+            "csrf": csrf_of(client),
+            "name": "",
+            "username": "platform-secret",
+            "secret": "new-secret",
+            "known_hosts": "new-secret",
+        },
+    )
+    assert response.status_code == 400
+    assert "platform-secret" not in response.text and "new-secret" not in response.text
+    assert store.get_cred(cred_id) == original
+    activity = store._rows("SELECT * FROM activity WHERE action='credential.update'")
+    assert activity and "400" in activity[0]["detail"]
+    assert "platform-secret" not in str(activity) and "new-secret" not in str(activity)

@@ -293,7 +293,7 @@
   "platforms.reason.excluded": "被当前规则排除",
   "platforms.reason.pattern": "命中排除规则 {pattern}",
   "platforms.reason.unknown": "被当前范围或规则过滤：{pattern}",
-  "creds.intro": "秘密保存后不再显示。需要轮换时，请新建凭据并将引用切换到新凭据。",
+  "creds.intro": "保存后不再显示秘密。修改凭据即可让引用它的任务、目标和平台接入统一使用新值。",
   "creds.saved": "已保存的凭据",
   "creds.name": "名称",
   "creds.type": "类型",
@@ -559,5 +559,10 @@
   "task.edit_target": "编辑",
   "task.edit_target_hint": "修改仓库地址会解除绑定；下次推送前需要绑定新的空仓库。更换凭据会保留现有绑定。",
   "task.delete_target_hint": "只会在 GitWarden 中移除该目标，远端仓库和本机档案都不会被改动。",
-  "task.delete_target_confirm": "确认删除"
+  "task.delete_target_confirm": "确认删除",
+  "creds.edit": "修改凭据",
+  "creds.edit_named": "修改 {name}",
+  "creds.edit_hint": "密码/令牌或私钥留空表示保持原值。所有引用在下次运行时使用修改后的凭据，类型不可更改。",
+  "error.credential_type_immutable": "凭据类型不可更改。",
+  "logs.activity.credential_update": "修改凭据"
 }
