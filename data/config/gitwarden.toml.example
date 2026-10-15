@@ -1,5 +1,6 @@
-# 复制为数据目录下的 config/gitwarden.toml 后按需修改。
-# 优先级：环境变量 > 本文件 > 默认值。管理员密码只能通过 GW_ADMIN_PASSWORD 设置。
+# Copy this file to config/gitwarden.toml under the data directory and edit as needed.
+# Precedence: environment variables > this file > defaults.
+# Set the administrator password only through GW_ADMIN_PASSWORD.
 
 [server]
 port = 8080

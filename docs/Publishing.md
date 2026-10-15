@@ -6,8 +6,6 @@
 
 **About:** Self-hosted Git backups that preserve captured history before force pushes, rewritten tags, and deletions—with a bilingual WebUI.
 
-**中文说明：** 镜像当前状态，保全已有历史。自托管 Git 备份工具，在跟随强推、标签改写和引用删除前保留已采集的历史。
-
 Suggested GitHub topics:
 
 ```text

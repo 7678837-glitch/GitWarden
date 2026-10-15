@@ -4,7 +4,7 @@
 
 GitWarden is a self-hosted Git history mirror. It periodically fetches a source repository into a local archive and pushes the collected state to one or more writable Git targets. It does not require a hosting-platform API for the core workflow, so a source or target can be any supported Git URL, including a manually configured GitHub repository.
 
-[简体中文](README.zh-CN.md)
+English · [简体中文](README.zh-CN.md)
 
 ![GitWarden overview](docs/images/overview.jpg)
 
