@@ -774,6 +774,9 @@ def create_app(config: Config, start_scheduler: bool = True) -> FastAPI:
                 ),
             )
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        # Single-administrator service: a new login replaces any previous sessions so
+        # the in-memory map cannot grow without bound across repeated sign-ins.
+        request.app.state.sessions.clear()
         request.app.state.sessions[token] = csrf
         response = _redirect("/")
         response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="strict", path="/")

@@ -70,6 +70,23 @@ def test_wrong_password_is_401_and_correct_password_logs_in(client, monkeypatch)
     assert client.get("/").status_code == 200
 
 
+def test_login_replaces_previous_sessions(client):
+    """A fresh login keeps only the new session so the map cannot grow forever."""
+    first = client.post("/login", data={"password": PASSWORD}, follow_redirects=False)
+    assert first.status_code == 303
+    first_token = first.cookies["gw_session"]
+    second = client.post("/login", data={"password": PASSWORD}, follow_redirects=False)
+    assert second.status_code == 303
+    second_token = second.cookies["gw_session"]
+    assert second_token != first_token
+    assert client.app.state.sessions == {second_token: client.app.state.sessions[second_token]}
+    from fastapi.testclient import TestClient
+
+    with TestClient(client.app, follow_redirects=False) as stale:
+        stale.cookies.set("gw_session", first_token)
+        assert stale.get("/").status_code == 303
+
+
 def test_post_without_valid_csrf_is_403(client):
     login(client)
     assert client.post("/creds", data={"name": "cred-probe", "kind": "https"}).status_code == 403
