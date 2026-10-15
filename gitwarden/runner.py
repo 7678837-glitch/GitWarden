@@ -352,8 +352,10 @@ def _maintain_archive(store: Store, run_id: int, archive: Path) -> None:
 
 
 def run_task(store: Store, data_dir: Path, task_id: int) -> bool | None:
-    """返回来源采集是否成功；锁忙返回 None，不计入失败退避。"""
+    """返回来源采集是否成功；锁忙或任务已删除返回 None，不计入失败退避。"""
     task = store.get_task(task_id)
+    if task is None:
+        return None
     archive = archive_path(data_dir, task)
     init_archive(archive)
     initial_backup = not _has_mirror_refs(archive)

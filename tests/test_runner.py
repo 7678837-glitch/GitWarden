@@ -338,3 +338,10 @@ def test_failed_run_keeps_final_git_error_after_large_progress(env, monkeypatch,
     assert expected in capture_step["raw"]
     assert capture_step["raw"].startswith("…[truncated ")
     assert len(capture_step["raw"].encode()) <= 65536
+
+
+def test_run_task_returns_none_when_task_was_deleted(tmp_path):
+    store = Store(tmp_path / "data")
+    task_id = store.add_task("gone", str(tmp_path / "missing.git"), enabled=False)
+    store.delete_task(task_id)
+    assert run_task(store, tmp_path / "data", task_id) is None
