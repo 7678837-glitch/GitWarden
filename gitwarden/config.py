@@ -93,7 +93,10 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         logs.get("retention_days", 90),
         int,
     )
-    password = env.get("GW_ADMIN_PASSWORD", "")
+    raw_password = env.get("GW_ADMIN_PASSWORD", "")
+    if not isinstance(raw_password, str):
+        raise ConfigError("未设置管理员密码：请在环境变量 GW_ADMIN_PASSWORD 中设置后再启动")
+    password = raw_password.strip()
     if not password:
         raise ConfigError("未设置管理员密码：请在环境变量 GW_ADMIN_PASSWORD 中设置后再启动")
     return _validate(

@@ -93,3 +93,17 @@ def test_invalid_scheduler_or_log_settings_are_rejected(
 
     with pytest.raises(ConfigError):
         load_config(_env(tmp_path, config_path, **{key: value}))
+
+
+def test_blank_admin_password_is_rejected(tmp_path: Path) -> None:
+    config_path = tmp_path / "gitwarden.toml"
+    with pytest.raises(ConfigError):
+        load_config(_env(tmp_path, config_path, GW_ADMIN_PASSWORD=""))
+    with pytest.raises(ConfigError):
+        load_config(_env(tmp_path, config_path, GW_ADMIN_PASSWORD="   "))
+
+
+def test_admin_password_is_stripped(tmp_path: Path) -> None:
+    config_path = tmp_path / "gitwarden.toml"
+    config = load_config(_env(tmp_path, config_path, GW_ADMIN_PASSWORD="  secret  "))
+    assert config.admin_password == "secret"
