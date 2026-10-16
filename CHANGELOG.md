@@ -1,5 +1,16 @@
 # Changelog
 
+## 20261016.1 — 2026-10-16
+
+First public release.
+
+- Pin GitHub Actions dependencies to verified full commit SHAs.
+- Skip tasks deleted before worker execution without recording a failed run.
+- Reject empty and whitespace-only administrator passwords while preserving valid passwords exactly as configured.
+- Keep simultaneous administrator sessions available across devices.
+
+Includes the backup, preservation, recovery, discovery, and WebUI features described in the release candidate below. Git LFS payloads and submodule repositories are not backed up, and databases from development snapshots are not migrated.
+
 ## 20261010.1 — 2026-10-10
 
 First public release candidate.
