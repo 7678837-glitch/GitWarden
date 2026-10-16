@@ -13,7 +13,7 @@ docker compose logs --tail=200 gitwarden
 curl --fail http://127.0.0.1:8080/health
 ```
 
-The most common startup error is a missing or empty `GW_ADMIN_PASSWORD`. Invalid numeric settings also stop startup. Check `GW_WORKERS` (1–4), positive `GW_TICK_SECONDS` and `GW_STALL_MINUTES`, minimum interval values of at least 1, and `GW_LOG_RETENTION_DAYS` of at least 1. If changing `GW_PORT`, use that port for health checks and browser access.
+The most common startup error is a missing, empty, or whitespace-only `GW_ADMIN_PASSWORD`. Invalid numeric settings also stop startup. Check `GW_WORKERS` (1–4), positive `GW_TICK_SECONDS` and `GW_STALL_MINUTES`, minimum interval values of at least 1, and `GW_LOG_RETENTION_DAYS` of at least 1. If changing `GW_PORT`, use that port for health checks and browser access.
 
 If the container starts but the page is unreachable, check that the host port is free and that `GW_BIND` is the address you are opening. The application listens on `0.0.0.0` inside the container; Compose controls host exposure.
 

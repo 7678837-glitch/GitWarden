@@ -12,7 +12,7 @@ In the container, `GW_DATA_DIR` defaults to `/data`. In a source checkout, the a
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `GW_ADMIN_PASSWORD` | required | WebUI administrator password. Startup fails when it is empty. |
+| `GW_ADMIN_PASSWORD` | required | WebUI administrator password. Startup fails when it is empty or whitespace-only. Other passwords are preserved exactly, including surrounding whitespace. |
 | `GW_DATA_DIR` | `/data` in the image, `./data` otherwise | SQLite database, archives, credentials, and work directory. |
 | `GW_CONFIG` | `$GW_DATA_DIR/config/gitwarden.toml` | Optional TOML configuration path. |
 | `GW_PORT` | `8080` | WebUI port and Compose host/container port; both default to `8080`. |

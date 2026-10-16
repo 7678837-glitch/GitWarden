@@ -32,17 +32,17 @@ Open <http://127.0.0.1:8080>, sign in, and complete [Getting started](Getting-st
 
 ## Run a published image
 
-The first release image is made available only after a `vYYYYMMDD.N` tag, matching `VERSION`, passes CI. The release build publishes a multi-architecture image to GHCR; it does not require a manually created PAT. The public owner and repository path are intentionally not filled into this documentation yet.
+Release images are made available after a `vYYYYMMDD.N` tag, matching `VERSION`, passes CI. The release build publishes Linux amd64 and arm64 images to `ghcr.io/xjoker/gitwarden`; it does not require a manually created PAT.
 
-After the release image path is known, pull and start it without a local build:
+Pull and start a published version without a local build:
 
 ```bash
-GW_IMAGE=ghcr.io/sample/gitwarden:20261010.1 docker compose pull
-GW_IMAGE=ghcr.io/sample/gitwarden:20261010.1 docker compose up -d --no-build
+GW_IMAGE=ghcr.io/xjoker/gitwarden:20261016.1 docker compose pull
+GW_IMAGE=ghcr.io/xjoker/gitwarden:20261016.1 docker compose up -d --no-build
 curl --fail http://127.0.0.1:8080/health
 ```
 
-`ghcr.io/sample/gitwarden:20261010.1` is an example path. Replace it with the published image path and an existing release tag. Do not mix a local build and a release image in the same verification step; check `/health` after the container is recreated.
+Choose an existing version from [Releases](https://github.com/xjoker/GitWarden/releases). Do not mix a local build and a release image in the same verification step; check `/health` after the container is recreated.
 
 ## Plain Docker
 

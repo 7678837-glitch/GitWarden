@@ -44,14 +44,14 @@ docker compose logs -f gitwarden
 
 The Compose configuration uses the project `.env`, the named volume `gitwarden-data`, and `127.0.0.1:8080`. The default image is built locally as `gitwarden:local`; Compose selects the host architecture automatically. The container runs as UID/GID `10001` and stores the application database, archives, credentials, and temporary work data under `/data`.
 
-The first public release image will be pushed to GHCR only after its `vYYYYMMDD.N` release tag passes CI. Until a public owner/repository and release image have been assigned, use the local build above. Once the published image path is known, set `GW_IMAGE` and pull without rebuilding:
+Release images are published to `ghcr.io/xjoker/gitwarden` after their `vYYYYMMDD.N` release tag passes CI. To run a published image, set `GW_IMAGE` and pull without rebuilding:
 
 ```bash
-GW_IMAGE=ghcr.io/sample/gitwarden:20261010.1 docker compose pull
-GW_IMAGE=ghcr.io/sample/gitwarden:20261010.1 docker compose up -d --no-build
+GW_IMAGE=ghcr.io/xjoker/gitwarden:20261016.1 docker compose pull
+GW_IMAGE=ghcr.io/xjoker/gitwarden:20261016.1 docker compose up -d --no-build
 ```
 
-The `sample` path is an example only. Replace it with the published path for the release you intend to run.
+See [Releases](https://github.com/xjoker/GitWarden/releases) for available versions and release notes.
 
 For a non-Compose deployment, see [Deployment](docs/wiki/Deployment.md). For configuration, persistent-volume backups, and recovery, see the [Wiki source index](docs/wiki/Home.md).
 
