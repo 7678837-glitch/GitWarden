@@ -94,7 +94,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         int,
     )
     password = env.get("GW_ADMIN_PASSWORD", "")
-    if not password:
+    if not password.strip():
         raise ConfigError("未设置管理员密码：请在环境变量 GW_ADMIN_PASSWORD 中设置后再启动")
     return _validate(
         Config(
