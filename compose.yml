@@ -13,6 +13,16 @@ services:
     ports:
       - "${GW_BIND:-127.0.0.1}:${GW_PORT:-8080}:${GW_PORT:-8080}"
     restart: unless-stopped
+    # Defense-in-depth runtime hardening: the app only needs to write to the
+    # mounted data volume, so run with a read-only root filesystem, a small
+    # writable tmpfs for /tmp, no Linux capabilities, and no privilege escalation.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges=true
     logging:
       driver: json-file
       options:
